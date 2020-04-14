@@ -13,19 +13,22 @@ else
 	CFLAGS += -O2 -DNDEBUG
 endif
 
-OBJECTS := mftp.o mftpserve.o
+OBJECTS := logging.o # mftp.o mftpserve.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
 .PHONY: all paths
 
-all:
-	$(C) $(SRC)/main.c -o $(BUILD)/main
+all: $(OBJECT_FILES)
+	$(C) $(OBJECT_FILES) $(SRC)/main.c -o $(BUILD)/main
 
 $(BUILD)/mftp.o: paths $(SRC)/mftp.c
 	$(C) $(SRC)/mftp.c -o $@
 
 $(BUILD)/mftpserve.o: paths $(SRC)/mftpserve.c $(OBJECT_FILES)
 	$(C) $(OBJECT_FILES) $(SRC)/mftpserve.c -o $@
+
+$(BUILD)/%.o: $(SRC)/%.c
+	$(C) $^ -c -o $@
 
 tests: paths
 

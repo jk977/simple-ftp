@@ -1,3 +1,5 @@
+#include "logging.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -5,7 +7,7 @@
 
 static char const* program;
 
-void usage(FILE* stream)
+static void usage(FILE* stream)
 {
     fprintf(stream, "Usage:\n");
     fprintf(stream, "\t%s -h\n", program);
@@ -25,6 +27,7 @@ int main(int argc, char** argv)
     while ((opt = getopt(argc, argv, "dh")) != -1) {
         switch (opt) {
         case 'd':
+            log_set_debug(true);
             break;
         case 'h':
             usage(stdout);
