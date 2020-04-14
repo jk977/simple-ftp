@@ -5,7 +5,7 @@ TESTS ?= ./tests
 
 C = $(CC) $(CFLAGS)
 CC := gcc
-CFLAGS := -I$(INCLUDE) -std=c99 -Wall -Wextra -Wpedantic -Werror
+CFLAGS := -I$(INCLUDE) -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror
 
 ifdef DEBUG
 	CFLAGS += -O0 -g3 -fsanitize=address,leak,undefined
@@ -18,8 +18,8 @@ OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
 .PHONY: all paths
 
-all: mftp mftpserve 
-	$(C) $(OBJECT_FILES) $(SRC)/assignment8.c -o $(BUILD)/assignment8
+all:
+	$(C) $(SRC)/main.c -o $(BUILD)/main
 
 $(BUILD)/mftp.o: paths $(SRC)/mftp.c
 	$(C) $(SRC)/mftp.c -o $@
