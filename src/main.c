@@ -32,8 +32,8 @@ int main(int argc, char** argv)
         case 'h':
             usage(stdout);
             return EXIT_SUCCESS;
-        default:
         case '?':
+        default:
             usage(stderr);
             return EXIT_FAILURE;
         }
