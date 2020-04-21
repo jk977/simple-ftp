@@ -5,9 +5,6 @@
 #error protocol.h requires _POSIX_C_SOURCE >= 200809L
 #endif
 
-#include <limits.h>
-#include <stdio.h>
-
 enum message_type {
     RE_ACK = 'A',
     RE_ERROR = 'E',

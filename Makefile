@@ -13,7 +13,7 @@ else
 	CFLAGS += -O2 -DNDEBUG
 endif
 
-OBJECTS := util.o logging.o protocol.o # mftp.o mftpserve.o
+OBJECTS := logging.o util.o protocol.o # mftp.o mftpserve.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
 .PHONY: all paths
