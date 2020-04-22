@@ -1,4 +1,5 @@
 #include "config.h"
+#include "logging.h"
 #include "util.h"
 
 #include <stdbool.h>
@@ -7,6 +8,19 @@
 #include <unistd.h>
 
 #include <sys/wait.h>
+
+static char const* program;
+
+static void usage(FILE* stream)
+{
+    fprintf(stream, "Usage:\n");
+    fprintf(stream, "\t%s -h\n", program);
+    fprintf(stream, "\t%s [-d]\n\n", program);
+
+    fprintf(stream, "Options:\n");
+    fprintf(stream, "\t-h\tShow this help message and exit.\n");
+    fprintf(stream, "\t-d\tEnable debug output.\n");
+}
 
 /*
  * handle_connection: Handle the connection given by the given file descriptor.
@@ -42,6 +56,7 @@ static int run_server(void)
 
     int const sock = make_socket(&info);
     FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
+    log_print("Created socket at file descriptor %d", sock);
 
     struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
 
@@ -56,6 +71,7 @@ static int run_server(void)
             "bind", EXIT_FAILURE);
     FAIL_IF(listen(sock, CFG_BACKLOG) < 0,
             "listen", EXIT_FAILURE);
+    log_print("Listening at port %d", CFG_PORT);
 
     while (true) {
         struct sockaddr addr = {0};
@@ -66,6 +82,8 @@ static int run_server(void)
             ERRMSG("accept", strerror(errno));
             continue;
         }
+
+        log_print("Accepted client at file descriptor %d", client_sock);
 
         // fork to have the child handle client so the parent can keep listening
         pid_t const current_pid = fork();
@@ -86,7 +104,31 @@ static int run_server(void)
     return EXIT_FAILURE;
 }
 
-int main(void)
+int main(int argc, char** argv)
 {
+    program = argv[0];
+
+    int opt;
+
+    while ((opt = getopt(argc, argv, "dh")) != -1) {
+        switch (opt) {
+        case 'd':
+            log_set_debug(true);
+            break;
+        case 'h':
+            usage(stdout);
+            return EXIT_SUCCESS;
+        case '?':
+        default:
+            usage(stderr);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (optind != argc) {
+        usage(stderr);
+        return EXIT_FAILURE;
+    }
+
     return run_server();
 }

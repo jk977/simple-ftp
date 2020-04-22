@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-void log_debug(char const* fmt, ...);
+void log_print(char const* fmt, ...);
 void log_set_debug(bool status);
 
 #endif // LOGGING_H_

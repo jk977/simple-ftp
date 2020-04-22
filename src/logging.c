@@ -5,7 +5,7 @@
 
 static bool enable_debug = false;
 
-void log_debug(char const* fmt, ...)
+void log_print(char const* fmt, ...)
 {
     if (enable_debug) {
         va_list ap;

@@ -1,7 +1,7 @@
+#include "config.h"
 #include "logging.h"
 #include "util.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -13,7 +13,7 @@ static void usage(FILE* stream)
 {
     fprintf(stream, "Usage:\n");
     fprintf(stream, "\t%s -h\n", program);
-    fprintf(stream, "\t%s [-d]\n\n", program);
+    fprintf(stream, "\t%s [-d] HOSTNAME\n\n", program);
 
     fprintf(stream, "Options:\n");
     fprintf(stream, "\t-h\tShow this help message and exit.\n");
@@ -31,6 +31,7 @@ int client_run(char const* hostname)
 
     char const* service = AS_STR(CFG_PORT);
     struct addrinfo* info = NULL;
+    log_print("Connecting to %s:%s", hostname, service);
 
     // get the actual info needed to connect client to the server
     GAI_FAIL_IF(getaddrinfo(hostname, service, &hints, &info), "getaddrinfo",
@@ -38,6 +39,16 @@ int client_run(char const* hostname)
 
     int const sock = make_socket(info);
     FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
+    log_print("Created socket with file descriptor %d", sock);
+
+    // copy the required data from the info struct and free it
+    struct sockaddr const dest_addr = *info->ai_addr;
+    socklen_t const dest_addrlen = info->ai_addrlen;
+    freeaddrinfo(info);
+
+    // use the provided info to connect to the server
+    FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0,
+            "connect", EXIT_FAILURE);
 
     // TODO: implement user interface for client, etc.
 
