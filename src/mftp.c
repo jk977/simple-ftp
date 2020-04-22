@@ -50,6 +50,8 @@ int client_run(char const* hostname)
     FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0,
             "connect", EXIT_FAILURE);
 
+    printf("Successfully connected to %s:%s\n", hostname, service);
+
     // TODO: implement user interface for client, etc.
 
     return EXIT_FAILURE;

@@ -12,6 +12,22 @@
 
 #include <sys/wait.h>
 
+size_t line_length(char const* str)
+{
+    if (str == NULL) {
+        return 0;
+    }
+
+    size_t len = 0;
+
+    while (*str != '\0' && *str != '\n') {
+        ++len;
+        ++str;
+    }
+
+    return len;
+}
+
 /*
  * write_str: Write `str` to `fd`, stopping on failure.
  *            Note that this function could be optimized to have less local

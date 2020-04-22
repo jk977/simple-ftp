@@ -83,7 +83,11 @@ static int run_server(void)
             continue;
         }
 
-        log_print("Accepted client at file descriptor %d", client_sock);
+        char hostname[CFG_MAXHOST] = {0};
+        GAI_FAIL_IF(addr_to_hostname(&addr, addr_len, hostname, CFG_MAXHOST),
+                    "addr_to_hostname", EXIT_FAILURE);
+
+        printf("Accepted connection from %s\n", hostname);
 
         // fork to have the child handle client so the parent can keep listening
         pid_t const current_pid = fork();

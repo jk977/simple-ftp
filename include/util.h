@@ -48,6 +48,7 @@
 #define STR(val)      #val       /* stringify the value passed */
 #define AS_STR(macro) STR(macro) /* expand + stringify the value/macro passed */
 
+size_t line_length(char const* str);
 size_t write_str(int fd, char const* str);
 size_t read_line(int fd, char* buf, size_t max_bytes);
 
