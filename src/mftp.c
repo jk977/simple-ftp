@@ -49,12 +49,17 @@ int client_run(char const* hostname)
     // use the provided info to connect to the server
     FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0,
             "connect", EXIT_FAILURE);
-
     printf("Successfully connected to %s:%s\n", hostname, service);
 
-    // TODO: implement user interface for client, etc.
+    while (true) {
+        printf(CFG_PROMPT);
+        fflush(stdout);
 
-    return EXIT_FAILURE;
+        char buf[CFG_MAXLINE] = {0};
+        FAIL_IF(fgets(buf, CFG_MAXLINE, stdin) == NULL, "fgets", EXIT_FAILURE);
+
+        // TODO: implement user interface for client, etc.
+    }
 }
 
 int main(int argc, char** argv)
