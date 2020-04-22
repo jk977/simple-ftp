@@ -8,6 +8,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <netdb.h>
+
 #include <sys/wait.h>
 
 /*
@@ -132,3 +134,46 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
     FAIL_IF(wait(status) < 0, "wait", EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
+
+/*
+ * make_socket: Create and configure a socket to match assignment description.
+ *
+ *              Returns the socket file descriptor on success, or -1 on failure
+ *              with `errno` set accordingly. Doesn't return `EXIT_FAILURE` on
+ *              failure since its value is usually 1, which is a valid file
+ *              descriptor.
+ */
+
+int make_socket(struct addrinfo const* info)
+{
+    int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+    FAIL_IF(sock < 0, "socket", -1);
+
+    int const opt_val = 1;
+    size_t const opt_size = sizeof(opt_val);
+
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt_val, opt_size) < 0) {
+        // prevent `close()` from changing `errno`
+        int const old_errno = errno;
+        close(sock);
+        errno = old_errno;
+
+        sock = -1;
+    }
+
+    return sock;
+}
+
+/*
+ * addr_to_hostname: Writes the buffer with the human-readable form of the
+ *                   given address.
+ *
+ *                   The return value is the result of `getnameinfo(3)`.
+ */
+
+int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,
+        char* host, socklen_t hostlen)
+{
+    return getnameinfo(addr, addrlen, host, hostlen, NULL, 0, 0);
+}
+

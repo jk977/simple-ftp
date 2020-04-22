@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "util.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -21,7 +22,25 @@ static void usage(FILE* stream)
 
 int client_run(char const* hostname)
 {
-    (void) hostname;
+    // hints for a TCP socket
+    struct addrinfo const hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_STREAM,
+        .ai_protocol = 0
+    };
+
+    char const* service = AS_STR(CFG_PORT);
+    struct addrinfo* info = NULL;
+
+    // get the actual info needed to connect client to the server
+    GAI_FAIL_IF(getaddrinfo(hostname, service, &hints, &info), "getaddrinfo",
+            EXIT_FAILURE);
+
+    int const sock = make_socket(info);
+    FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
+
+    // TODO: implement user interface for client, etc.
+
     return EXIT_FAILURE;
 }
 
