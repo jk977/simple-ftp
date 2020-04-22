@@ -71,7 +71,7 @@ static int run_server(void)
             "bind", EXIT_FAILURE);
     FAIL_IF(listen(sock, CFG_BACKLOG) < 0,
             "listen", EXIT_FAILURE);
-    log_print("Listening at port %d", CFG_PORT);
+    log_print("Listening on port %d", CFG_PORT);
 
     while (true) {
         struct sockaddr addr = {0};
@@ -104,8 +104,6 @@ static int run_server(void)
         // them to finish
         while (waitpid(-1, NULL, WNOHANG) > 0) {}
     }
-
-    return EXIT_FAILURE;
 }
 
 int main(int argc, char** argv)
