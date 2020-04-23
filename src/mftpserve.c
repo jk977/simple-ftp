@@ -27,6 +27,7 @@ static int send_ack(int sock, int port)
 {
     size_t const ack_len = 32;
     char ack[ack_len];
+    memset(ack, '\0', sizeof(ack));
 
     if (port > 0) {
         snprintf(ack, ack_len, "A%d\n", port);
