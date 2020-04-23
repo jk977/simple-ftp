@@ -31,39 +31,13 @@ char const* get_cmd_arg(char const* cmd)
 
 int run_command(int sock, char const* msg)
 {
-    (void) sock;
-
-    char const* arg;
-    enum command cmd = cmd_parse(msg, &arg);
-
-    switch (cmd) {
-    case CMD_EXIT:
-        cmd_exit(EXIT_SUCCESS);
-        return EXIT_FAILURE;
-    case CMD_CD:
-        return cmd_chdir(arg);
-    case CMD_RCD:
-        log_print("rcd (%s) command.", arg);
-        break;
-    case CMD_LS:
-        return cmd_ls(STDOUT_FILENO);
-    case CMD_RLS:
-        log_print("rls command.");
-        break;
-    case CMD_GET:
-        log_print("get (%s) command.", arg);
-        break;
-    case CMD_SHOW:
-        log_print("show (%s) command.", arg);
-        break;
-    case CMD_PUT:
-        log_print("put (%s) command.", arg);
-        break;
-    case CMD_INVALID:
-        log_print("invalid command.");
+    char response[BUFSIZ] = {0};
+    
+    if (cmd_exec(sock, msg, response, BUFSIZ) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 
+    log_print("Server response: %s", response);
     return EXIT_SUCCESS;
 }
 
@@ -110,7 +84,8 @@ int client_run(char const* hostname)
             buf[buf_len - 1] = '\0';
         }
 
-        run_command(sock, buf);
+        int const status = run_command(sock, buf);
+        log_print("Command status: %d", status);
     }
 }
 

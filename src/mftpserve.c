@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <unistd.h>
@@ -22,6 +23,24 @@ static void usage(FILE* stream)
     fprintf(stream, "\t-d\tEnable debug output.\n");
 }
 
+static int send_ack(int sock, int port)
+{
+    size_t const ack_len = 32;
+    char ack[ack_len];
+
+    if (port > 0) {
+        snprintf(ack, ack_len, "A%d\n", port);
+    } else {
+        strcat(ack, "A\n");
+    }
+
+    if (write_str(sock, ack) != strlen(ack)) {
+        return EXIT_FAILURE;
+    } else {
+        return EXIT_SUCCESS;
+    }
+}
+
 /*
  * handle_connection: Handle the connection given by the given file descriptor.
  *
@@ -33,6 +52,11 @@ static int handle_connection(int client_sock)
 {
     // TODO: implement server commands, etc.
 
+    char message[BUFSIZ] = {0};
+    read_line(client_sock, message, BUFSIZ - 1);
+    send_ack(client_sock, -1);
+
+    log_print("Received message: %s", message);
     close(client_sock);
     return EXIT_FAILURE;
 }
