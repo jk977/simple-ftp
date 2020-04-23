@@ -1,3 +1,4 @@
+#include "commands.h"
 #include "config.h"
 #include "logging.h"
 #include "util.h"
@@ -5,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <ctype.h>
 #include <unistd.h>
 
 static char const* program;
@@ -18,6 +20,51 @@ static void usage(FILE* stream)
     fprintf(stream, "Options:\n");
     fprintf(stream, "\t-h\tShow this help message and exit.\n");
     fprintf(stream, "\t-d\tEnable debug output.\n");
+}
+
+char const* get_cmd_arg(char const* cmd)
+{
+    cmd += word_length(cmd);
+    cmd += space_length(cmd);
+    return cmd;
+}
+
+void run_command(int sock, char const* msg)
+{
+    (void) sock;
+
+    char const* arg;
+    enum command cmd = cmd_parse(msg, &arg);
+
+    switch (cmd) {
+    case CMD_EXIT:
+        log_print("exit command.");
+        break;
+    case CMD_CD:
+        log_print("cd (%s) command.", arg);
+        break;
+    case CMD_RCD:
+        log_print("rcd (%s) command.", arg);
+        break;
+    case CMD_LS:
+        log_print("ls command.");
+        break;
+    case CMD_RLS:
+        log_print("rls command.");
+        break;
+    case CMD_GET:
+        log_print("get (%s) command.", arg);
+        break;
+    case CMD_SHOW:
+        log_print("show (%s) command.", arg);
+        break;
+    case CMD_PUT:
+        log_print("put (%s) command.", arg);
+        break;
+    case CMD_INVALID:
+        log_print("invalid command.");
+        break;
+    }
 }
 
 int client_run(char const* hostname)
@@ -47,8 +94,8 @@ int client_run(char const* hostname)
     freeaddrinfo(info);
 
     // use the provided info to connect to the server
-    FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0,
-            "connect", EXIT_FAILURE);
+    FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, "connect",
+            EXIT_FAILURE);
     printf("Successfully connected to %s:%s\n", hostname, service);
 
     while (true) {
@@ -57,8 +104,7 @@ int client_run(char const* hostname)
 
         char buf[CFG_MAXLINE] = {0};
         FAIL_IF(fgets(buf, CFG_MAXLINE, stdin) == NULL, "fgets", EXIT_FAILURE);
-
-        // TODO: implement user interface for client, etc.
+        run_command(sock, buf);
     }
 }
 

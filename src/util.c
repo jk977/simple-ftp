@@ -1,18 +1,24 @@
 #include "util.h"
 
-#include <stdarg.h>
 #include <stdlib.h>
-#include <stdio.h>
 
+#include <ctype.h>
 #include <fcntl.h>
-#include <string.h>
 #include <unistd.h>
-
-#include <netdb.h>
 
 #include <sys/wait.h>
 
-size_t line_length(char const* str)
+static int is_newline(int c)
+{
+    return c == '\n';
+}
+
+static int is_nonspace(int c)
+{
+    return !isspace(c);
+}
+
+static size_t count_chars(char const* str, int (*reject_char)(int))
 {
     if (str == NULL) {
         return 0;
@@ -20,12 +26,27 @@ size_t line_length(char const* str)
 
     size_t len = 0;
 
-    while (*str != '\0' && *str != '\n') {
+    while (!reject_char(*str) && *str != '\0') {
         ++len;
         ++str;
     }
 
     return len;
+}
+
+size_t word_length(char const* str)
+{
+    return count_chars(str, isspace);
+}
+
+size_t space_length(char const* str)
+{
+    return count_chars(str, is_nonspace);
+}
+
+size_t line_length(char const* str)
+{
+    return count_chars(str, is_newline);
 }
 
 /*
@@ -69,11 +90,6 @@ static size_t read_until(int fd, char* buf, size_t max_bytes,
     }
 
     return max_bytes - remaining;
-}
-
-static int is_newline(int c)
-{
-    return c == '\n';
 }
 
 /*
