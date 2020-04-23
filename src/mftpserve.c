@@ -1,3 +1,4 @@
+#include "commands.h"
 #include "config.h"
 #include "logging.h"
 #include "util.h"
@@ -6,6 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <errno.h>
+#include <signal.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <sys/wait.h>
@@ -42,24 +46,126 @@ static int send_ack(int sock, int port)
     }
 }
 
+static int send_err(int sock, char const* msg)
+{
+    size_t const err_len = strlen(msg) + 3;
+    char err[err_len];
+    memset(err, '\0', sizeof(err));
+
+    err[0] = 'E';
+    strcat(err, msg);
+    strcat(err, "\n");
+
+    if (write_str(sock, err) != err_len - 1) {
+        return EXIT_FAILURE;
+    } else {
+        return EXIT_SUCCESS;
+    }
+}
+
+static int init_data_sock(int* data_sock)
+{
+    *data_sock = make_socket(NULL);
+
+    if (*data_sock < 0) {
+        return -1;
+    }
+
+    struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
+    struct sockaddr_in address = {
+        .sin_family = AF_INET,
+        .sin_port = 0,
+        .sin_addr = sin_addr,
+    };
+
+    socklen_t addr_size = sizeof(address);
+
+    if (bind(*data_sock, (struct sockaddr*) &address, addr_size) < 0) {
+        close(*data_sock);
+        *data_sock = -1;
+        return -1;
+    }
+
+    if (getsockname(*data_sock, (struct sockaddr*) &address, &addr_size) < 0) {
+        close(*data_sock);
+        *data_sock = -1;
+        return -1;
+    }
+
+    return ntohs(address.sin_port);
+}
+
+static int process_command(int client_sock, char const* cmd, int* data_sock)
+{
+    (void) data_sock;
+    log_print("Received command from client: %s", cmd);
+
+    char code = cmd[0];
+    char const* arg = cmd + 1;
+
+    if (code == cmd_get_ctl(CMD_EXIT)) {
+        send_ack(client_sock, -1);
+        cmd_exit(EXIT_SUCCESS);
+    } else if (code == cmd_get_ctl(CMD_RCD)) {
+        send_ack(client_sock, -1);
+        return cmd_chdir(arg);
+    } else if (code == cmd_get_ctl(CMD_DATA)) {
+        int const port = init_data_sock(data_sock);
+
+        if (port <= 0) {
+            return send_err(client_sock, "Failed to open data connection.");
+        } else {
+            log_print("Opened data connection on port %d", port);
+            return send_ack(client_sock, port);
+        }
+    }
+
+    if (code == cmd_get_ctl(CMD_RLS)) {
+        send_ack(client_sock, -1);
+        log_print("rls command.");
+    } else if (code == cmd_get_ctl(CMD_GET)) {
+        send_ack(client_sock, -1);
+        log_print("get command.");
+    } else if (code == cmd_get_ctl(CMD_SHOW)) {
+        send_ack(client_sock, -1);
+        log_print("show command.");
+    } else if (code == cmd_get_ctl(CMD_PUT)) {
+        send_ack(client_sock, -1);
+        log_print("put command.");
+    } else {
+        send_err(client_sock, "Invalid command given");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
 /*
  * handle_connection: Handle the connection given by the given file descriptor.
- *
- *                    Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on success or
- *                    failure, respectively.
  */
 
-static int handle_connection(int client_sock)
+static void handle_connection(int client_sock)
 {
-    // TODO: implement server commands, etc.
+    int data_sock = -1;
 
-    char message[BUFSIZ] = {0};
-    read_line(client_sock, message, BUFSIZ - 1);
-    send_ack(client_sock, -1);
+    while (true) {
+        char message[CFG_MAXLINE] = {0};
 
-    log_print("Received message: %s", message);
-    close(client_sock);
-    return EXIT_FAILURE;
+        if (read_line(client_sock, message, CFG_MAXLINE - 1) > 0) {
+            process_command(client_sock, message, &data_sock);
+        } else {
+            log_print("Failed to receive message from client");
+            send_err(client_sock, strerror(errno));
+        }
+    }
+}
+
+static void handle_sigchld(int signum)
+{
+    (void) signum;
+    int status;
+    pid_t const child = wait(&status);
+    log_print("Child %u exited with status %d", child, status);
 }
 
 /*
@@ -72,19 +178,11 @@ static int handle_connection(int client_sock)
 
 static int run_server(void)
 {
-    // info for a TCP socket
-    struct addrinfo const info = {
-        .ai_family = AF_INET,
-        .ai_socktype = SOCK_STREAM,
-        .ai_protocol = 0
-    };
-
-    int const sock = make_socket(&info);
+    int const sock = make_socket(NULL);
     FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
     log_print("Created socket at file descriptor %d", sock);
 
     struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
-
     struct sockaddr_in address = {
         .sin_family = AF_INET,
         .sin_port = htons(CFG_PORT),
@@ -104,7 +202,12 @@ static int run_server(void)
         int const client_sock = accept(sock, &addr, &addr_len);
 
         if (client_sock < 0) {
-            ERRMSG("accept", strerror(errno));
+            if (errno != EINTR) {
+                // ignore `EINTR` since child termination may interrupt
+                // `accept()` with `SIGCHLD`
+                ERRMSG("accept", strerror(errno));
+            }
+
             continue;
         }
 
@@ -119,21 +222,26 @@ static int run_server(void)
         FAIL_IF(current_pid < 0, "fork", EXIT_FAILURE);
 
         if (current_pid == 0) {
-            return handle_connection(client_sock);
+            handle_connection(client_sock);
         }
 
         // parent doesn't need client
         close(client_sock);
-
-        // clean up process table if any children finished, but don't wait for
-        // them to finish
-        while (waitpid(-1, NULL, WNOHANG) > 0) {}
     }
 }
 
 int main(int argc, char** argv)
 {
     program = argv[0];
+
+    struct sigaction act = {
+        .sa_handler = handle_sigchld,
+        .sa_flags = 0,
+    };
+
+    // register signal to clean up children when they finish
+    FAIL_IF(sigemptyset(&act.sa_mask) < 0, "sigemptyset", EXIT_FAILURE);
+    FAIL_IF(sigaction(SIGCHLD, &act, NULL) < 0, "sigaction", EXIT_FAILURE);
 
     int opt;
 

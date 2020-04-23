@@ -72,15 +72,26 @@ size_t write_str(int fd, char const* str)
     return total_bytes;
 }
 
-static size_t read_until(int fd, char* buf, size_t max_bytes,
+/*
+ * read_until: Read from `fd` until either an EOF is reached, a byte is read
+ *             that returns nonzero from `char_is_end()`, `max_bytes` have been
+ *             read, or an error occurs.
+ *
+ *             Returns the number of bytes read on success, or -1 on failure
+ *             with `errno` set.
+ */
+
+static ssize_t read_until(int fd, char* buf, size_t max_bytes,
         int (*char_is_end)(int))
 {
     size_t remaining = max_bytes;
     ssize_t prev_bytes;
 
-    // read bytes one at a time to check for newlines
-    while (remaining > 0 && (prev_bytes = read(fd, buf, 1)) > 0) {
-        if (char_is_end != NULL && char_is_end(*buf)) {
+    // read bytes one at a time to check for end
+    while (remaining > 0 && (prev_bytes = read(fd, buf, 1)) != 0) {
+        if (prev_bytes < 0) {
+            return -1;
+        } else if (char_is_end != NULL && char_is_end(*buf)) {
             *buf = '\0';
             break;
         }
@@ -100,7 +111,7 @@ static size_t read_until(int fd, char* buf, size_t max_bytes,
  *           Returns the total number of bytes read.
  */
 
-size_t read_all(int fd, char* buf, size_t max_bytes)
+ssize_t read_all(int fd, char* buf, size_t max_bytes)
 {
     return read_until(fd, buf, max_bytes, NULL);
 }
@@ -113,7 +124,7 @@ size_t read_all(int fd, char* buf, size_t max_bytes)
  *            Returns the total number of bytes read.
  */
 
-size_t read_line(int fd, char* buf, size_t max_bytes)
+ssize_t read_line(int fd, char* buf, size_t max_bytes)
 {
     return read_until(fd, buf, max_bytes, is_newline);
 }
@@ -168,7 +179,8 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
 }
 
 /*
- * make_socket: Create and configure a socket to match assignment description.
+ * make_socket: Create and configure a socket with the given info. If `p_info`
+ *              is `NULL`, defaults to a TCP socket.
  *
  *              Returns the socket file descriptor on success, or -1 on failure
  *              with `errno` set accordingly. Doesn't return `EXIT_FAILURE` on
@@ -176,9 +188,22 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
  *              descriptor.
  */
 
-int make_socket(struct addrinfo const* info)
+int make_socket(struct addrinfo const* p_info)
 {
-    int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+    struct addrinfo info;
+
+    if (p_info != NULL) {
+        info = *p_info;
+    } else {
+        // default to a TCP socket
+        info = (struct addrinfo) {
+            .ai_family = AF_INET,
+            .ai_socktype = SOCK_STREAM,
+            .ai_protocol = 0
+        };
+    }
+
+    int const sock = socket(info.ai_family, info.ai_socktype, info.ai_protocol);
     FAIL_IF(sock < 0, "socket", -1);
 
     int const opt_val = 1;
@@ -189,8 +214,7 @@ int make_socket(struct addrinfo const* info)
         int const old_errno = errno;
         close(sock);
         errno = old_errno;
-
-        sock = -1;
+        return -1;
     }
 
     return sock;

@@ -31,9 +31,9 @@ char const* get_cmd_arg(char const* cmd)
 
 int run_command(int sock, char const* msg)
 {
-    char response[BUFSIZ] = {0};
-    
-    if (cmd_exec(sock, msg, response, BUFSIZ) != EXIT_SUCCESS) {
+    char response[CFG_MAXLINE] = {0};
+
+    if (cmd_exec_msg(sock, msg, response, CFG_MAXLINE - 1) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
     }
 

@@ -2,7 +2,6 @@
 #include "logging.h"
 #include "util.h"
 
-#include <stdbool.h>
 #include <stdlib.h>
 
 #include <fcntl.h>
@@ -10,33 +9,21 @@
 
 #include <sys/stat.h>
 
-enum cmd_type {
-    CMD_EXIT = 0,
-    CMD_CD = 1,
-    CMD_RCD = 2,
-    CMD_LS = 3,
-    CMD_RLS = 4,
-    CMD_GET = 5,
-    CMD_SHOW = 6,
-    CMD_PUT = 7,
-    CMD_INVALID = -1,
-};
-
-struct cmd_info {
-    bool has_arg: 1;    // flag for required command argument
-    bool is_remote: 1;  // flag for command that communicates with server
-    bool needs_data: 1; // flag for command that receives data from server
-    char ctl;           // character used to denote command in control message
-};
-
 struct command {
     enum cmd_type type;
     char const* arg;
 };
 
+struct cmd_info {
+    bool has_arg: 1;        // flag for required command argument
+    bool is_remote: 1;      // flag for command that communicates with server
+    bool needs_data: 1;     // flag for command that receives data from server
+    char ctl;               // character used for command in control message
+};
+
 // table associating index (as an `enum cmd_type`) with command info
 struct cmd_info const info_table[] = {
-    { .has_arg = false, .is_remote = true,  .needs_data = false },
+    { .has_arg = false, .is_remote = true,  .needs_data = false, .ctl = 'Q' },
     { .has_arg = true,  .is_remote = false, .needs_data = false },
     { .has_arg = true,  .is_remote = true,  .needs_data = false, .ctl = 'C' },
     { .has_arg = false, .is_remote = false, .needs_data = false },
@@ -44,7 +31,17 @@ struct cmd_info const info_table[] = {
     { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'G' },
     { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'S' },
     { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'P' },
+    { .has_arg = false,  .is_remote = true, .needs_data = false, .ctl = 'D' },
 };
+
+int cmd_get_ctl(enum cmd_type cmd)
+{
+    if (cmd == CMD_INVALID) {
+        return -1;
+    } else {
+        return info_table[cmd].ctl;
+    }
+}
 
 static struct command cmd_parse(char const* msg)
 {
@@ -90,29 +87,28 @@ static struct command cmd_parse(char const* msg)
     return result;
 }
 
-static void cmd_exit(int status)
+void cmd_exit(int status)
 {
     log_print("Exiting.");
     exit(status);
 }
 
-static int cmd_chdir(char const* path)
+int cmd_chdir(char const* path)
 {
     log_print("Changing directory to %s", path);
     FAIL_IF(chdir(path) < 0, "chdir", EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
-static int cmd_ls(int fd)
+int cmd_ls(int fd)
 {
     int status;
     char* cmd[] = { "ls", "-l", NULL };
-
     log_print("Executing `ls -l`");
     return exec_to_fd(fd, &status, cmd);
 }
 
-int cmd_exec(int fd, char const* msg, char* rsp, size_t rsp_len)
+int cmd_exec_msg(int fd, char const* msg, char* rsp, size_t rsp_len)
 {
     struct command const cmd = cmd_parse(msg);
 
@@ -149,7 +145,7 @@ int cmd_exec(int fd, char const* msg, char* rsp, size_t rsp_len)
         return EXIT_FAILURE;
     }
 
-    read_line(fd, rsp, rsp_len);
+    FAIL_IF(read_line(fd, rsp, rsp_len) < 0, "read_line", EXIT_FAILURE);
 
     if (cmd.type == CMD_EXIT) {
         cmd_exit(EXIT_SUCCESS);
