@@ -1,7 +1,14 @@
 #include "commands.h"
+#include "logging.h"
 #include "util.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <sys/stat.h>
 
 // table associating the command (with index based on `enum command` value)
 // with a `bool` that indicates how many arguments are required
@@ -48,4 +55,37 @@ enum command cmd_parse(char const* msg, char const** p_arg)
     }
 
     return cmd;
+}
+
+void cmd_exit(int status)
+{
+    log_print("Exiting.");
+    exit(status);
+}
+
+int cmd_chdir(char const* path)
+{
+    log_print("Changing directory to %s", path);
+    return chdir(path);
+}
+
+int cmd_ls(int fd)
+{
+    log_print("Executing `ls -l`");
+
+    char* cmd[] = { "ls", "-l", NULL };
+    int status;
+
+    if (exec_to_fd(fd, &status, cmd) != EXIT_SUCCESS) {
+        return -1;
+    }
+
+    return status;
+}
+
+int cmd_put(int fd, char const* path)
+{
+    int const in_fd = open(path, O_RDONLY);
+    FAIL_IF(in_fd < 0, "open", EXIT_FAILURE);
+    return send_file(fd, in_fd);
 }

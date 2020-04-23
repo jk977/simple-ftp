@@ -15,4 +15,9 @@ enum command {
 
 enum command cmd_parse(char const* msg, char const** p_arg);
 
+void cmd_exit(int status);
+int cmd_chdir(char const* path);
+int cmd_ls(int fd);
+int cmd_put(int fd, char const* path);
+
 #endif // COMMANDS_H_

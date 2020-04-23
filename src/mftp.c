@@ -29,7 +29,7 @@ char const* get_cmd_arg(char const* cmd)
     return cmd;
 }
 
-void run_command(int sock, char const* msg)
+int run_command(int sock, char const* msg)
 {
     (void) sock;
 
@@ -38,17 +38,15 @@ void run_command(int sock, char const* msg)
 
     switch (cmd) {
     case CMD_EXIT:
-        log_print("exit command.");
-        break;
+        cmd_exit(EXIT_SUCCESS);
+        return EXIT_FAILURE;
     case CMD_CD:
-        log_print("cd (%s) command.", arg);
-        break;
+        return cmd_chdir(arg);
     case CMD_RCD:
         log_print("rcd (%s) command.", arg);
         break;
     case CMD_LS:
-        log_print("ls command.");
-        break;
+        return cmd_ls(STDOUT_FILENO);
     case CMD_RLS:
         log_print("rls command.");
         break;
@@ -63,8 +61,10 @@ void run_command(int sock, char const* msg)
         break;
     case CMD_INVALID:
         log_print("invalid command.");
-        break;
+        return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }
 
 int client_run(char const* hostname)
@@ -104,6 +104,12 @@ int client_run(char const* hostname)
 
         char buf[CFG_MAXLINE] = {0};
         FAIL_IF(fgets(buf, CFG_MAXLINE, stdin) == NULL, "fgets", EXIT_FAILURE);
+        size_t const buf_len = strlen(buf);
+
+        if (buf[buf_len - 1] == '\n') {
+            buf[buf_len - 1] = '\0';
+        }
+
         run_command(sock, buf);
     }
 }
