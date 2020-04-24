@@ -3,7 +3,9 @@
 #include <stdlib.h>
 
 #include <ctype.h>
+#include <libgen.h>
 #include <fcntl.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <sys/wait.h>
@@ -157,6 +159,28 @@ int send_file(int dest_fd, int src_fd)
     }
 
     return EXIT_SUCCESS;
+}
+
+/*
+ * basename_of: Wrapper for `basename(3)` that doesn't mutate its argument
+ *              regardless of the usage of GNU C.
+ *
+ *              Returns a pointer to the base of the path, contained within
+ *              the string `path`. Thus, if `path` goes out of scope or is
+ *              freed by the caller, the return value is invalidated.
+ */
+
+char const* basename_of(char const* path)
+{
+    size_t const path_len = strlen(path);
+    char path_copy[path_len + 1];
+    memset(path_copy, '\0', sizeof(path_copy));
+
+    char const* base = basename(path_copy);
+    size_t const base_len = strlen(base);
+    size_t const path_offset = path_len - base_len;
+
+    return path + path_offset;
 }
 
 /*

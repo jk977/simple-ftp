@@ -30,9 +30,11 @@ static void usage(FILE* stream)
 static int send_ack(int sock, in_port_t const* port)
 {
     if (port != NULL) {
-        Q_FAIL_IF(dprintf(sock, "A%u\n", *port) < 0, EXIT_FAILURE);
+        log_print("Sending ack with port %u", *port);
+        Q_FAIL_IF(dprintf(sock, "%c%u\n", RSP_ACK, *port) < 0, EXIT_FAILURE);
     } else {
-        Q_FAIL_IF(dprintf(sock, "A\n") < 0, EXIT_FAILURE);
+        log_print("Sending ack with no port");
+        Q_FAIL_IF(dprintf(sock, "%c\n", RSP_ACK) < 0, EXIT_FAILURE);
     }
 
     return EXIT_SUCCESS;
@@ -40,46 +42,53 @@ static int send_ack(int sock, in_port_t const* port)
 
 static int send_err(int sock, char const* context, char const* msg)
 {
-    Q_FAIL_IF(dprintf(sock, "E%s: %s\n", context, msg) < 0, EXIT_FAILURE);
+    log_print("Sending error (context=\"%s\", msg=\"%s\")", context, msg);
+    Q_FAIL_IF(dprintf(sock, "%c%s: %s\n", RSP_ERR, context, msg) < 0,
+              EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
-static int init_data(int client_sock)
+static int listen_on(in_port_t port)
 {
-    int const data_sock = make_socket(NULL);
-
-    if (data_sock < 0) {
-        return -1;
-    }
+    int const sock = make_socket(NULL);
+    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
 
     struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
     struct sockaddr_in address = {
         .sin_family = AF_INET,
-        .sin_port = 0,
+        .sin_port = htons(port),
         .sin_addr = sin_addr,
     };
 
+    // set up server to start listening for connections (any address)
+    Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof(address)) < 0,
+              EXIT_FAILURE);
+    Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0,
+              EXIT_FAILURE);
+    log_print("Listening on port %u", port);
+
+    return sock;
+}
+
+static int init_data(int client_sock)
+{
+    int const data_sock = listen_on(0);
+    Q_FAIL_IF(data_sock < 0, -1);
+
+    struct sockaddr_in address;
     socklen_t addr_size = sizeof(address);
 
-    if (bind(data_sock, (struct sockaddr*) &address, addr_size) < 0) {
-        goto fail;
-    }
-
     if (getsockname(data_sock, (struct sockaddr*) &address, &addr_size) < 0) {
-        goto fail;
+        int const old_errno = errno;
+        close(data_sock);
+        errno = old_errno;
+
+        return -1;
     }
 
     in_port_t const port = ntohs(address.sin_port);
     Q_FAIL_IF(send_ack(client_sock, &port) != EXIT_SUCCESS, -1);
     return data_sock;
-
-fail:
-    (void) 0;
-    int const old_errno = errno;
-    close(data_sock);
-    errno = old_errno;
-
-    return -1;
 }
 
 static void server_exit(int client_sock)
@@ -120,7 +129,7 @@ static int process_command(int client_sock, char const* cmd, int* data_sock)
         return respond(client_sock, success, "cmd_chdir");
     } else if (code == cmd_get_ctl(CMD_DATA)) {
         *data_sock = init_data(client_sock);
-        return respond(client_sock, *data_sock < 0, "init_data");
+        return respond(client_sock, *data_sock >= 0, "init_data");
     }
 
     // make sure data connection has been created
@@ -188,23 +197,8 @@ static void handle_sigchld(int signum)
 
 static int run_server(void)
 {
-    int const sock = make_socket(NULL);
-    FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
-    log_print("Created socket at file descriptor %d", sock);
-
-    struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
-    struct sockaddr_in address = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CFG_PORT),
-        .sin_addr = sin_addr,
-    };
-
-    // set up server to start listening for connections (any address)
-    FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof(address)) < 0,
-            "bind", EXIT_FAILURE);
-    FAIL_IF(listen(sock, CFG_BACKLOG) < 0,
-            "listen", EXIT_FAILURE);
-    log_print("Listening on port %d", CFG_PORT);
+    int const sock = listen_on(CFG_PORT);
+    FAIL_IF(sock < 0, "listen_on", EXIT_FAILURE);
 
     while (true) {
         struct sockaddr addr = {0};

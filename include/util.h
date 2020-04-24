@@ -68,6 +68,7 @@ ssize_t read_line(int fd, char* buf, size_t max_bytes);
 
 int exec_to_fd(int fd, int* status, char* const cmd[]);
 int send_file(int dest_fd, int src_fd);
+char const* basename_of(char const* path);
 
 int make_socket(struct addrinfo const* info);
 int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,

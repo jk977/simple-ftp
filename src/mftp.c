@@ -6,8 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <errno.h>
+#include <fcntl.h>
 #include <ctype.h>
 #include <unistd.h>
+
+#include <sys/stat.h>
 
 static char const* program;
 
@@ -22,26 +26,12 @@ static void usage(FILE* stream)
     fprintf(stream, "\t-d\tEnable debug output.\n");
 }
 
-char const* get_cmd_arg(char const* cmd)
+static int print_server_error(char const* msg)
 {
-    cmd += word_length(cmd);
-    cmd += space_length(cmd);
-    return cmd;
+    return fprintf(stderr, "Server error: %s\n", &msg[1]);
 }
 
-int run_command(int sock, char const* msg)
-{
-    char response[CFG_MAXLINE] = {0};
-
-    if (cmd_exec_msg(sock, msg, response, CFG_MAXLINE - 1) != EXIT_SUCCESS) {
-        return EXIT_FAILURE;
-    }
-
-    log_print("Server response: %s", response);
-    return EXIT_SUCCESS;
-}
-
-int client_run(char const* hostname)
+static struct addrinfo* get_info(char const* host, char const* port)
 {
     // hints for a TCP socket
     struct addrinfo const hints = {
@@ -50,13 +40,17 @@ int client_run(char const* hostname)
         .ai_protocol = 0
     };
 
-    char const* service = AS_STR(CFG_PORT);
     struct addrinfo* info = NULL;
-    log_print("Connecting to %s:%s", hostname, service);
+    log_print("Connecting to %s:%s", host, port);
 
     // get the actual info needed to connect client to the server
-    GAI_FAIL_IF(getaddrinfo(hostname, service, &hints, &info), "getaddrinfo",
-            EXIT_FAILURE);
+    GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), "getaddrinfo", NULL);
+    return info;
+}
+
+static int connect_to(char const* host, char const* port)
+{
+    struct addrinfo* info = get_info(host, port);
 
     int const sock = make_socket(info);
     FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
@@ -67,10 +61,118 @@ int client_run(char const* hostname)
     socklen_t const dest_addrlen = info->ai_addrlen;
     freeaddrinfo(info);
 
-    // use the provided info to connect to the server
+    // use the provided info to connect to the given destination
     FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, "connect",
             EXIT_FAILURE);
-    printf("Successfully connected to %s:%s\n", hostname, service);
+    log_print("Successfully connected to %s:%s", host, port);
+
+    return sock;
+}
+
+static int init_data(int server_sock, char const* host)
+{
+    char const data_ctl = cmd_get_ctl(CMD_DATA);
+    Q_FAIL_IF(dprintf(server_sock, "%c\n", data_ctl) < 0, -1);
+
+    char response[CFG_MAXLINE] = {0};
+    Q_FAIL_IF(read_line(server_sock, response, CFG_MAXLINE - 1) < 0, -1);
+
+    if (response[0] == RSP_ERR) {
+        print_server_error(response);
+        return -1;
+    }
+
+    char const* data_port = response + 1;
+    return connect_to(host, data_port);
+}
+
+static int run_command(int server_sock, char const* host, char const* msg)
+{
+    char const* arg;
+    enum cmd_type cmd = cmd_parse(msg, &arg);
+
+    if (cmd == CMD_INVALID) {
+        printf("Unrecognized command: \"%s\"\n", msg);
+        return EXIT_FAILURE;
+    }
+
+    // handle local commands
+    if (cmd == CMD_LS) {
+        return cmd_ls(STDOUT_FILENO);
+    } else if (cmd == CMD_CD) {
+        return cmd_chdir(arg);
+    }
+
+    char const code = cmd_get_ctl(cmd);
+    int data_sock = -1;
+
+    if (cmd_needs_data(cmd)) {
+        // only initialize data connection if necessary
+        data_sock = init_data(server_sock, host);
+        Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
+    }
+
+    // send command with argument to server
+    if (arg != NULL) {
+        FAIL_IF(dprintf(server_sock, "%c%s\n", code, arg) < 0, "dprintf",
+                EXIT_FAILURE);
+    } else {
+        FAIL_IF(dprintf(server_sock, "%c\n", code) < 0, "dprintf",
+                EXIT_FAILURE);
+    }
+
+    // get server response
+    char response[CFG_MAXLINE] = {0};
+    FAIL_IF(read_line(server_sock, response, CFG_MAXLINE - 1) < 0, "read_line",
+            EXIT_FAILURE);
+
+    if (cmd == CMD_EXIT) {
+        // TODO: inspect code to ensure that no error response is received from
+        // server on exit commands
+        cmd_exit(EXIT_SUCCESS);
+    }
+
+    if (response[0] == RSP_ERR) {
+        print_server_error(response);
+        return EXIT_FAILURE;
+    }
+
+    log_print("Server response: %s", response);
+
+    if (cmd == CMD_GET) {
+        int const dest_fd = open(basename_of(arg), O_CREAT | O_EXCL);
+        FAIL_IF(dest_fd < 0, "open", EXIT_FAILURE);
+
+        if (send_file(dest_fd, data_sock) < 0) {
+            perror("send_file");
+            close(dest_fd);
+            return EXIT_FAILURE;
+        }
+
+        close(dest_fd);
+    } else if (cmd == CMD_SHOW) {
+        FAIL_IF(send_file(STDOUT_FILENO, data_sock) < 0, "send_file",
+                EXIT_FAILURE);
+    } else if (cmd == CMD_PUT) {
+        int const src_fd = open(arg, O_RDONLY);
+        FAIL_IF(src_fd < 0, "open", EXIT_FAILURE);
+
+        if (send_file(data_sock, src_fd) < 0) {
+            perror("send_file");
+            close(src_fd);
+            return EXIT_FAILURE;
+        }
+
+        close(src_fd);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+static int client_run(char const* hostname)
+{
+    int const sock = connect_to(hostname, AS_STR(CFG_PORT));
+    FAIL_IF(sock < 0, "connect_to", EXIT_FAILURE);
 
     while (true) {
         printf(CFG_PROMPT);
@@ -84,7 +186,7 @@ int client_run(char const* hostname)
             buf[buf_len - 1] = '\0';
         }
 
-        int const status = run_command(sock, buf);
+        int const status = run_command(sock, hostname, buf);
         log_print("Command status: %d", status);
     }
 }

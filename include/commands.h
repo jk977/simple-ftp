@@ -17,8 +17,18 @@ enum cmd_type {
     CMD_INVALID,
 };
 
+enum rsp_code {
+    RSP_ACK = 'A',
+    RSP_ERR = 'E',
+};
+
 int cmd_get_ctl(enum cmd_type cmd);
+bool cmd_is_remote(enum cmd_type cmd);
+bool cmd_needs_data(enum cmd_type cmd);
+
+enum cmd_type cmd_parse(char const* msg, char const** p_arg);
 enum cmd_type cmd_get_type(char code);
+
 int cmd_exec_msg(int fd, char const* msg, char* rsp, size_t rsp_len);
 
 void cmd_exit(int status);
