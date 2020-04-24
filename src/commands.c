@@ -29,21 +29,46 @@ struct cmd_info const info_table[] = {
     { .has_arg = false, .is_remote = true,  .needs_data = false, .ctl = 'D' },
 };
 
-bool cmd_is_remote(enum cmd_type cmd)
-{
-    if (cmd == CMD_INVALID) {
-        return false;
-    } else {
-        return info_table[cmd].is_remote;
-    }
-}
-
 int cmd_get_ctl(enum cmd_type cmd)
 {
     if (!cmd_is_remote(cmd)) {
         return -1;
     } else {
         return info_table[cmd].ctl;
+    }
+}
+
+enum cmd_type cmd_get_type(char code)
+{
+    if (code == cmd_get_ctl(CMD_EXIT)) {
+        return CMD_EXIT;
+    } else if (code == cmd_get_ctl(CMD_CD)) {
+        return CMD_CD;
+    } else if (code == cmd_get_ctl(CMD_RCD)) {
+        return CMD_RCD;
+    } else if (code == cmd_get_ctl(CMD_LS)) {
+        return CMD_LS;
+    } else if (code == cmd_get_ctl(CMD_RLS)) {
+        return CMD_RLS;
+    } else if (code == cmd_get_ctl(CMD_GET)) {
+        return CMD_GET;
+    } else if (code == cmd_get_ctl(CMD_SHOW)) {
+        return CMD_SHOW;
+    } else if (code == cmd_get_ctl(CMD_PUT)) {
+        return CMD_PUT;
+    } else if (code == cmd_get_ctl(CMD_DATA)) {
+        return CMD_DATA;
+    } else {
+        return CMD_INVALID;
+    }
+}
+
+bool cmd_is_remote(enum cmd_type cmd)
+{
+    if (cmd == CMD_INVALID) {
+        return false;
+    } else {
+        return info_table[cmd].is_remote;
     }
 }
 
@@ -110,10 +135,9 @@ int cmd_chdir(char const* path)
     return EXIT_SUCCESS;
 }
 
-int cmd_ls(int fd)
+int cmd_ls(int fd, int* status)
 {
-    int status;
     char* cmd[] = { "ls", "-l", NULL };
     log_print("Executing `ls -l`");
-    return exec_to_fd(fd, &status, cmd);
+    return exec_to_fd(fd, status, cmd);
 }

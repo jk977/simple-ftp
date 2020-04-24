@@ -49,10 +49,8 @@ static struct addrinfo* get_info(char const* host, char const* port)
         .ai_protocol = 0
     };
 
-    struct addrinfo* info = NULL;
-    log_print("Connecting to %s:%s", host, port);
-
     // get the actual info needed to connect client to the server
+    struct addrinfo* info = NULL;
     GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), "getaddrinfo", NULL);
     return info;
 }
@@ -62,8 +60,7 @@ static int connect_to(char const* host, char const* port)
     struct addrinfo* info = get_info(host, port);
 
     int const sock = make_socket(info);
-    FAIL_IF(sock < 0, "make_socket", EXIT_FAILURE);
-    log_print("Created socket with file descriptor %d", sock);
+    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
 
     // copy the required data from the info struct and free it
     struct sockaddr const dest_addr = *info->ai_addr;
@@ -71,24 +68,10 @@ static int connect_to(char const* host, char const* port)
     freeaddrinfo(info);
 
     // use the provided info to connect to the given destination
-    FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, "connect",
-            EXIT_FAILURE);
+    Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
     log_print("Successfully connected to %s:%s", host, port);
 
     return sock;
-}
-
-static int init_data(int server_sock, char const* host)
-{
-    char const data_ctl = cmd_get_ctl(CMD_DATA);
-    Q_FAIL_IF(dprintf(server_sock, "%c\n", data_ctl) < 0, -1);
-
-    char response[CFG_MAXLINE] = {0};
-    Q_FAIL_IF(read_line(server_sock, response, CFG_MAXLINE - 1) < 0, -1);
-    FAIL_IF_SERV_ERR(response, -1);
-
-    char const* data_port = response + 1;
-    return connect_to(host, data_port);
 }
 
 static int send_cmd(int server_sock, enum cmd_type cmd, char const* arg)
@@ -97,8 +80,10 @@ static int send_cmd(int server_sock, enum cmd_type cmd, char const* arg)
 
     if (arg != NULL) {
         Q_FAIL_IF(dprintf(server_sock, "%c%s\n", code, arg) < 0, EXIT_FAILURE);
+        log_print("Sent command: %c%s", code, arg);
     } else {
         Q_FAIL_IF(dprintf(server_sock, "%c\n", code) < 0, EXIT_FAILURE);
+        log_print("Sent command: %c", code);
     }
 
     return EXIT_SUCCESS;
@@ -107,25 +92,33 @@ static int send_cmd(int server_sock, enum cmd_type cmd, char const* arg)
 static int handle_local_cmd(enum cmd_type cmd, char const* arg)
 {
     if (cmd == CMD_LS) {
-        return cmd_ls(STDOUT_FILENO);
+        int status = -1;
+        int result = cmd_ls(STDOUT_FILENO, &status);
+        log_print("`ls` exit status: %d", status);
+        return result;
     } else if (cmd == CMD_CD) {
         return cmd_chdir(arg);
     } else {
-        log_print("Unexpected command (cmd=%d)", cmd);
+        log_print("Unexpected command %d; check info table for accuracy", cmd);
         return EXIT_FAILURE;
     }
 }
 
-static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
-        char const* arg)
+static int get_response(int server_sock, char* rsp, size_t rsp_len)
+{
+    Q_FAIL_IF(read_line(server_sock, rsp, rsp_len) < 0, EXIT_FAILURE);
+    log_print("Received server response: %s", rsp);
+    return EXIT_SUCCESS;
+}
+
+static int handle_remote_cmd(int server_sock, enum cmd_type cmd, char const* arg)
 {
     FAIL_IF(send_cmd(server_sock, cmd, arg) != EXIT_SUCCESS, "send_cmd",
             EXIT_FAILURE);
 
-    // get server response
     char response[CFG_MAXLINE] = {0};
-    FAIL_IF(read_line(server_sock, response, CFG_MAXLINE - 1) < 0, "read_line",
-            EXIT_FAILURE);
+    FAIL_IF(get_response(server_sock, response, sizeof(response) - 1) < 0,
+            "get_response", EXIT_FAILURE);
 
     if (cmd == CMD_EXIT) {
         cmd_exit(EXIT_SUCCESS);
@@ -135,36 +128,54 @@ static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
     return EXIT_SUCCESS;
 }
 
+static int init_data(int server_sock, char const* host)
+{
+    FAIL_IF(send_cmd(server_sock, CMD_DATA, NULL) < 0, "send_cmd", -1);
+
+    char response[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(server_sock, response, sizeof(response) - 1) < 0,
+            "get_response", -1);
+    FAIL_IF_SERV_ERR(response, -1);
+
+    char const* data_port = &response[1];
+    return connect_to(host, data_port);
+}
+
 static int handle_data_cmd(int server_sock, char const* host,
         enum cmd_type cmd, char const* arg)
 {
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-    Q_FAIL_IF(send_cmd(server_sock, cmd, arg) != EXIT_SUCCESS, EXIT_FAILURE);
+    FAIL_IF(send_cmd(server_sock, cmd, arg) != EXIT_SUCCESS, "send_cmd",
+            EXIT_FAILURE);
 
     char response[CFG_MAXLINE] = {0};
-    Q_FAIL_IF(read_line(server_sock, response, CFG_MAXLINE - 1) < 0, 
-              EXIT_FAILURE);
+    FAIL_IF(get_response(server_sock, response, sizeof(response) - 1) < 0,
+            "get_response", EXIT_FAILURE);
+    FAIL_IF_SERV_ERR(response, EXIT_FAILURE);
 
-    if (cmd == CMD_GET) {
+    if (cmd == CMD_LS || cmd == CMD_SHOW) {
+        FAIL_IF(send_file(STDOUT_FILENO, data_sock) < 0, "send_file",
+                EXIT_FAILURE);
+    } else if (cmd == CMD_GET) {
         int const dest_fd = open(basename_of(arg), O_CREAT | O_EXCL);
-        Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
+        FAIL_IF(dest_fd < 0, "open", EXIT_FAILURE);
 
         if (send_file(dest_fd, data_sock) < 0) {
             perror("send_file");
+            close(data_sock);
             close(dest_fd);
             return EXIT_FAILURE;
         }
 
         close(dest_fd);
-    } else if (cmd == CMD_SHOW) {
-        Q_FAIL_IF(send_file(STDOUT_FILENO, data_sock) < 0, EXIT_FAILURE);
     } else if (cmd == CMD_PUT) {
         int const src_fd = open(arg, O_RDONLY);
-        Q_FAIL_IF(src_fd < 0, EXIT_FAILURE);
+        FAIL_IF(src_fd < 0, "open", EXIT_FAILURE);
 
         if (send_file(data_sock, src_fd) < 0) {
             int const old_errno = errno;
+            close(data_sock);
             close(src_fd);
             errno = old_errno;
 
@@ -174,6 +185,7 @@ static int handle_data_cmd(int server_sock, char const* host,
         close(src_fd);
     }
 
+    close(data_sock);
     return EXIT_SUCCESS;
 }
 
@@ -206,7 +218,7 @@ static int client_run(char const* hostname)
         fflush(stdout);
 
         char buf[CFG_MAXLINE] = {0};
-        FAIL_IF(fgets(buf, CFG_MAXLINE, stdin) == NULL, "fgets", EXIT_FAILURE);
+        FAIL_IF(fgets(buf, sizeof(buf), stdin) == NULL, "fgets", EXIT_FAILURE);
         size_t const buf_len = strlen(buf);
 
         if (buf[buf_len - 1] == '\n') {
