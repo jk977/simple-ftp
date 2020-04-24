@@ -51,8 +51,8 @@ static int send_err(int sock, char const* context, char const* msg)
 static int respond(int client_sock, bool success, char const* context)
 {
     if (success) {
-        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, "send_ack",
-                EXIT_FAILURE);
+        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS,
+                "send_ack", EXIT_FAILURE);
     } else {
         FAIL_IF(send_err(client_sock, context, strerror(errno)) != EXIT_SUCCESS,
                 "send_err", EXIT_FAILURE);
@@ -76,8 +76,7 @@ static int listen_on(in_port_t port)
     // set up server to start listening for connections (any address)
     Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof(address)) < 0,
               EXIT_FAILURE);
-    Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0,
-              EXIT_FAILURE);
+    Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0, EXIT_FAILURE);
     log_print("Listening on port %u", port);
 
     return sock;
@@ -109,7 +108,8 @@ static int init_data(int client_sock)
     Q_FAIL_IF(accept(data_sock, (struct sockaddr*) &address, &addr_size) < 0, -1);
     addr_to_hostname((struct sockaddr*) &address, addr_size,
                      client_host, sizeof(client_host));
-    log_print("Accepted data client at %s:%u", client_host, address.sin_port);
+    log_print("Accepted data client at %s:%u",
+              client_host, ntohs(address.sin_port));
 
     return data_sock;
 }
@@ -136,7 +136,9 @@ static int handle_local_cmd(int client_sock, int* data_sock,
         *data_sock = init_data(client_sock);
         return respond(client_sock, *data_sock >= 0, "init_data");
     } else {
-        send_err(client_sock, "Server", "Invalid command given");
+        char const* msg = "Invalid command given";
+        FAIL_IF(send_err(client_sock, "Server", msg) != EXIT_SUCCESS,
+                "send_err", EXIT_FAILURE);
         return EXIT_SUCCESS;
     }
 }
@@ -146,9 +148,14 @@ static int handle_data_cmd(int client_sock, int* data_sock,
 {
     // make sure data connection has been created
     if (*data_sock < 0) {
-        send_err(client_sock, "Server", "Data connection not established.");
+        char const* msg = "Data connection not established.";
+        FAIL_IF(send_err(client_sock, "Server", msg) != EXIT_SUCCESS,
+                "send_err", EXIT_FAILURE);
         return EXIT_SUCCESS;
     }
+
+    FAIL_IF(send_ack(*data_sock, NULL) != EXIT_SUCCESS, "send_ack",
+            EXIT_FAILURE);
 
     (void) arg;
     bool success = false;
@@ -156,8 +163,8 @@ static int handle_data_cmd(int client_sock, int* data_sock,
 
     if (cmd == CMD_RLS) {
         int status = -1;
-        success = cmd_ls(*data_sock, &status) == EXIT_SUCCESS;
         context = "cmd_ls";
+        success = cmd_ls(*data_sock, &status) == EXIT_SUCCESS;
         log_print("Exit status (ls): %d", status);
     } else if (cmd == CMD_GET) {
         context = "get";
@@ -178,7 +185,6 @@ static int handle_data_cmd(int client_sock, int* data_sock,
 static int process_command(int client_sock, int* data_sock, char const* msg)
 {
     log_print("Received command from client: %s", msg);
-
     enum cmd_type cmd = cmd_get_type(msg[0]);
     char const* arg = &msg[1];
 
