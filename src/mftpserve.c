@@ -27,47 +27,28 @@ static void usage(FILE* stream)
     fprintf(stream, "\t-d\tEnable debug output.\n");
 }
 
-static int send_ack(int sock, int port)
+static int send_ack(int sock, in_port_t const* port)
 {
-    size_t const ack_len = 32;
-    char ack[ack_len];
-    memset(ack, '\0', sizeof(ack));
-
-    if (port > 0) {
-        snprintf(ack, ack_len, "A%d\n", port);
+    if (port != NULL) {
+        Q_FAIL_IF(dprintf(sock, "A%u\n", *port) < 0, EXIT_FAILURE);
     } else {
-        strcat(ack, "A\n");
+        Q_FAIL_IF(dprintf(sock, "A\n") < 0, EXIT_FAILURE);
     }
 
-    if (write_str(sock, ack) != strlen(ack)) {
-        return EXIT_FAILURE;
-    } else {
-        return EXIT_SUCCESS;
-    }
+    return EXIT_SUCCESS;
 }
 
-static int send_err(int sock, char const* msg)
+static int send_err(int sock, char const* context, char const* msg)
 {
-    size_t const err_len = strlen(msg) + 3;
-    char err[err_len];
-    memset(err, '\0', sizeof(err));
-
-    err[0] = 'E';
-    strcat(err, msg);
-    strcat(err, "\n");
-
-    if (write_str(sock, err) != err_len - 1) {
-        return EXIT_FAILURE;
-    } else {
-        return EXIT_SUCCESS;
-    }
+    Q_FAIL_IF(dprintf(sock, "E%s: %s\n", context, msg) < 0, EXIT_FAILURE);
+    return EXIT_SUCCESS;
 }
 
-static int init_data_sock(int* data_sock)
+static int init_data(int client_sock)
 {
-    *data_sock = make_socket(NULL);
+    int const data_sock = make_socket(NULL);
 
-    if (*data_sock < 0) {
+    if (data_sock < 0) {
         return -1;
     }
 
@@ -80,64 +61,93 @@ static int init_data_sock(int* data_sock)
 
     socklen_t addr_size = sizeof(address);
 
-    if (bind(*data_sock, (struct sockaddr*) &address, addr_size) < 0) {
-        close(*data_sock);
-        *data_sock = -1;
-        return -1;
+    if (bind(data_sock, (struct sockaddr*) &address, addr_size) < 0) {
+        goto fail;
     }
 
-    if (getsockname(*data_sock, (struct sockaddr*) &address, &addr_size) < 0) {
-        close(*data_sock);
-        *data_sock = -1;
-        return -1;
+    if (getsockname(data_sock, (struct sockaddr*) &address, &addr_size) < 0) {
+        goto fail;
     }
 
-    return ntohs(address.sin_port);
+    in_port_t const port = ntohs(address.sin_port);
+    Q_FAIL_IF(send_ack(client_sock, &port) != EXIT_SUCCESS, -1);
+    return data_sock;
+
+fail:
+    (void) 0;
+    int const old_errno = errno;
+    close(data_sock);
+    errno = old_errno;
+
+    return -1;
+}
+
+static void server_exit(int client_sock)
+{
+    if (send_ack(client_sock, NULL) != EXIT_SUCCESS) {
+        ERRMSG("send_ack", strerror(errno));
+        cmd_exit(EXIT_FAILURE);
+    } else {
+        cmd_exit(EXIT_SUCCESS);
+    }
+}
+
+static int respond(int client_sock, bool success, char const* context)
+{
+    if (success) {
+        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, "send_ack",
+                EXIT_FAILURE);
+    } else {
+        FAIL_IF(send_err(client_sock, context, strerror(errno)) != EXIT_SUCCESS,
+                "send_err", EXIT_FAILURE);
+    }
+
+    return EXIT_SUCCESS;
 }
 
 static int process_command(int client_sock, char const* cmd, int* data_sock)
 {
-    (void) data_sock;
     log_print("Received command from client: %s", cmd);
 
     char code = cmd[0];
     char const* arg = cmd + 1;
 
+    // handle non-data-transfer commands
     if (code == cmd_get_ctl(CMD_EXIT)) {
-        send_ack(client_sock, -1);
-        cmd_exit(EXIT_SUCCESS);
+        server_exit(client_sock);
     } else if (code == cmd_get_ctl(CMD_RCD)) {
-        send_ack(client_sock, -1);
-        return cmd_chdir(arg);
+        bool const success = (cmd_chdir(arg) == EXIT_SUCCESS);
+        return respond(client_sock, success, "cmd_chdir");
     } else if (code == cmd_get_ctl(CMD_DATA)) {
-        int const port = init_data_sock(data_sock);
-
-        if (port <= 0) {
-            return send_err(client_sock, "Failed to open data connection.");
-        } else {
-            log_print("Opened data connection on port %d", port);
-            return send_ack(client_sock, port);
-        }
+        *data_sock = init_data(client_sock);
+        return respond(client_sock, *data_sock < 0, "init_data");
     }
 
+    // make sure data connection has been created
+    if (*data_sock < 0) {
+        send_err(client_sock, "Server", "Data connection not established.");
+        return EXIT_SUCCESS;
+    }
+
+    bool success = false;
+    char const* context = NULL;
+
+    // handle data-transfer commands
     if (code == cmd_get_ctl(CMD_RLS)) {
-        send_ack(client_sock, -1);
-        log_print("rls command.");
+        success = cmd_ls(*data_sock) == EXIT_SUCCESS;
+        context = "cmd_ls";
     } else if (code == cmd_get_ctl(CMD_GET)) {
-        send_ack(client_sock, -1);
-        log_print("get command.");
+        context = "get";
     } else if (code == cmd_get_ctl(CMD_SHOW)) {
-        send_ack(client_sock, -1);
-        log_print("show command.");
+        context = "show";
     } else if (code == cmd_get_ctl(CMD_PUT)) {
-        send_ack(client_sock, -1);
-        log_print("put command.");
+        context = "put";
     } else {
-        send_err(client_sock, "Invalid command given");
-        return EXIT_FAILURE;
+        send_err(client_sock, "Server", "Invalid command given");
+        return EXIT_SUCCESS;
     }
 
-    return EXIT_SUCCESS;
+    return respond(client_sock, success, context);
 }
 
 /*
@@ -155,7 +165,7 @@ static void handle_connection(int client_sock)
             process_command(client_sock, message, &data_sock);
         } else {
             log_print("Failed to receive message from client");
-            send_err(client_sock, strerror(errno));
+            send_err(client_sock, "read_line", strerror(errno));
         }
     }
 }

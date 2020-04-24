@@ -50,20 +50,23 @@ size_t line_length(char const* str)
 }
 
 /*
- * write_str: Write `str` to `fd`, stopping on failure.
- *            Note that this function could be optimized to have less local
- *            variables, but it would sacrifice readability.
+ * write_str: Write `str` to `fd`, stopping on failure. `str` must be at most
+ *            `SSIZE_MAX` bytes long, excluding the null-terminating byte.
  *
  *            Returns the total number of bytes written.
  */
 
-size_t write_str(int fd, char const* str)
+ssize_t write_str(int fd, char const* str)
 {
     size_t remaining = strlen(str);
     size_t total_bytes = 0;
     ssize_t prev_bytes;
 
-    while (remaining > 0 && (prev_bytes = write(fd, str, remaining)) > 0) {
+    while (remaining > 0 && (prev_bytes = write(fd, str, remaining)) != 0) {
+        if (prev_bytes < 0) {
+            return prev_bytes;
+        }
+
         remaining -= prev_bytes;
         total_bytes += prev_bytes;
         str += prev_bytes;
@@ -75,7 +78,8 @@ size_t write_str(int fd, char const* str)
 /*
  * read_until: Read from `fd` until either an EOF is reached, a byte is read
  *             that returns nonzero from `char_is_end()`, `max_bytes` have been
- *             read, or an error occurs.
+ *             read, or an error occurs. `str` must be at most `SSIZE_MAX` bytes
+ *             long, excluding the null-terminating byte.
  *
  *             Returns the number of bytes read on success, or -1 on failure
  *             with `errno` set.
@@ -106,7 +110,7 @@ static ssize_t read_until(int fd, char* buf, size_t max_bytes,
 /*
  * read_all: Read at most `max_bytes` from `fd` into `buf`, stopping when
  *           either no bytes are read, `max_bytes` have been read, or an error
- *           occurs.
+ *           occurs. Wraps `read_until()`.
  *
  *           Returns the total number of bytes read.
  */
@@ -119,7 +123,8 @@ ssize_t read_all(int fd, char* buf, size_t max_bytes)
 /*
  * read_line: Read at most `max_bytes` from `fd` into `buf`, stopping when
  *            either no bytes are read, `max_bytes` have been read, a newline
- *            character is encountered, or an error occurs.
+ *            character is encountered, or an error occurs. Wraps
+ *            `read_until()`.
  *
  *            Returns the total number of bytes read.
  */
@@ -145,9 +150,9 @@ int send_file(int dest_fd, int src_fd)
     char buf[BUFSIZ] = {0};
     size_t prev_bytes;
 
-    while ((prev_bytes = read_all(src_fd, buf, BUFSIZ)) > 0) {
+    while ((prev_bytes = read_all(src_fd, buf, BUFSIZ - 1)) > 0) {
         size_t const written_bytes = write_str(dest_fd, buf);
-        FAIL_IF(written_bytes != prev_bytes, "write_str", EXIT_FAILURE);
+        Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
         memset(buf, '\0', BUFSIZ);
     }
 
@@ -166,15 +171,15 @@ int send_file(int dest_fd, int src_fd)
 int exec_to_fd(int fd, int* status, char* const cmd[])
 {
     pid_t const child = fork();
-    FAIL_IF(child < 0, "fork", EXIT_FAILURE);
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
 
     if (child == 0) {
-        FAIL_IF(dup2(fd, STDOUT_FILENO) < 0, "dup2", EXIT_FAILURE);
-        FAIL_IF(dup2(STDOUT_FILENO, STDERR_FILENO) < 0, "dup2", EXIT_FAILURE);
-        FAIL_IF(execvp(cmd[0], cmd) < 0, "execvp", EXIT_FAILURE);
+        Q_FAIL_IF(dup2(fd, STDOUT_FILENO) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(dup2(STDOUT_FILENO, STDERR_FILENO) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(execvp(cmd[0], cmd) < 0, EXIT_FAILURE);
     }
 
-    FAIL_IF(wait(status) < 0, "wait", EXIT_FAILURE);
+    Q_FAIL_IF(wait(status) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
@@ -204,7 +209,7 @@ int make_socket(struct addrinfo const* p_info)
     }
 
     int const sock = socket(info.ai_family, info.ai_socktype, info.ai_protocol);
-    FAIL_IF(sock < 0, "socket", -1);
+    Q_FAIL_IF(sock < 0, -1);
 
     int const opt_val = 1;
     size_t const opt_size = sizeof(opt_val);

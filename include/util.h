@@ -23,12 +23,23 @@
  *          provided by checking for errors.
  */
 
-#define FAIL_IF(cond, cause, ret)                                       \
-    do {                                                                \
-        if (cond) {                                                     \
-            ERRMSG(cause, strerror(errno));                             \
-            return ret;                                                 \
-        }                                                               \
+#define FAIL_IF(cond, cause, ret)           \
+    do {                                    \
+        if (cond) {                         \
+            ERRMSG(cause, strerror(errno)); \
+            return ret;                     \
+        }                                   \
+    } while (0)
+
+/*
+ * Q_FAIL_IF: Does the same as `FAIL_IF` but doesn't output anything.
+ */
+
+#define Q_FAIL_IF(cond, ret)    \
+    do {                        \
+        if (cond) {             \
+            return ret;         \
+        }                       \
     } while (0)
 
 /*
@@ -52,7 +63,7 @@ size_t word_length(char const* str);
 size_t space_length(char const* str);
 size_t line_length(char const* str);
 
-size_t write_str(int fd, char const* str);
+ssize_t write_str(int fd, char const* str);
 ssize_t read_line(int fd, char* buf, size_t max_bytes);
 
 int exec_to_fd(int fd, int* status, char* const cmd[]);

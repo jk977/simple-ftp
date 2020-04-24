@@ -15,28 +15,27 @@ struct command {
 };
 
 struct cmd_info {
-    bool has_arg: 1;        // flag for required command argument
-    bool is_remote: 1;      // flag for command that communicates with server
-    bool needs_data: 1;     // flag for command that receives data from server
-    char ctl;               // character used for command in control message
+    bool has_arg;   // flag for required command argument
+    bool is_remote; // flag for command that communicates with server
+    char ctl;       // character used for command in control message
 };
 
 // table associating index (as an `enum cmd_type`) with command info
 struct cmd_info const info_table[] = {
-    { .has_arg = false, .is_remote = true,  .needs_data = false, .ctl = 'Q' },
-    { .has_arg = true,  .is_remote = false, .needs_data = false },
-    { .has_arg = true,  .is_remote = true,  .needs_data = false, .ctl = 'C' },
-    { .has_arg = false, .is_remote = false, .needs_data = false },
-    { .has_arg = false, .is_remote = true,  .needs_data = true, .ctl = 'L' },
-    { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'G' },
-    { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'S' },
-    { .has_arg = true,  .is_remote = true,  .needs_data = true, .ctl = 'P' },
-    { .has_arg = false,  .is_remote = true, .needs_data = false, .ctl = 'D' },
+    { .has_arg = false, .is_remote = true,  .ctl = 'Q' },
+    { .has_arg = true,  .is_remote = false,            },
+    { .has_arg = true,  .is_remote = true,  .ctl = 'C' },
+    { .has_arg = false, .is_remote = false,            },
+    { .has_arg = false, .is_remote = true,  .ctl = 'L' },
+    { .has_arg = true,  .is_remote = true,  .ctl = 'G' },
+    { .has_arg = true,  .is_remote = true,  .ctl = 'S' },
+    { .has_arg = true,  .is_remote = true,  .ctl = 'P' },
+    { .has_arg = false, .is_remote = true,  .ctl = 'D' },
 };
 
 int cmd_get_ctl(enum cmd_type cmd)
 {
-    if (cmd == CMD_INVALID) {
+    if (cmd == CMD_INVALID || !info_table[cmd].is_remote) {
         return -1;
     } else {
         return info_table[cmd].ctl;
@@ -96,7 +95,7 @@ void cmd_exit(int status)
 int cmd_chdir(char const* path)
 {
     log_print("Changing directory to %s", path);
-    FAIL_IF(chdir(path) < 0, "chdir", EXIT_FAILURE);
+    Q_FAIL_IF(chdir(path) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
@@ -111,41 +110,25 @@ int cmd_ls(int fd)
 int cmd_exec_msg(int fd, char const* msg, char* rsp, size_t rsp_len)
 {
     struct command const cmd = cmd_parse(msg);
+    Q_FAIL_IF(cmd.type == CMD_INVALID, EXIT_FAILURE);
 
     // handle local commands
-    switch (cmd.type) {
-    case CMD_INVALID:
-        return EXIT_FAILURE;
-    case CMD_LS:
+    if (cmd.type == CMD_LS) {
         return cmd_ls(STDOUT_FILENO);
-    case CMD_CD:
+    } else if (cmd.type == CMD_CD) {
         return cmd_chdir(cmd.arg);
-    default:
-        break;
     }
+
+    struct cmd_info const* info = &info_table[cmd.type];
 
     // handle commands that require server communication
-    struct cmd_info const* info = &info_table[cmd.type];
-    size_t const arg_len = (cmd.arg != NULL) ? strlen(cmd.arg) : 0;
-    size_t const ctlbuf_len = arg_len + 3;
-
-    char ctlbuf[ctlbuf_len];
-    memset(ctlbuf, '\0', sizeof(ctlbuf));
-    ctlbuf[0] = info->ctl;
-
-    if (arg_len > 0) {
-        strcat(ctlbuf, cmd.arg);
+    if (cmd.arg != NULL) {
+        Q_FAIL_IF(dprintf(fd, "%c%s\n", info->ctl, cmd.arg) < 0, EXIT_FAILURE);
+    } else {
+        Q_FAIL_IF(dprintf(fd, "%c\n", info->ctl) < 0, EXIT_FAILURE);
     }
 
-    strcat(ctlbuf, "\n");
-    size_t const written_bytes = write_str(fd, ctlbuf);
-    log_print("Wrote %zu bytes to fd", written_bytes);
-
-    if (written_bytes != ctlbuf_len - 1) {
-        return EXIT_FAILURE;
-    }
-
-    FAIL_IF(read_line(fd, rsp, rsp_len) < 0, "read_line", EXIT_FAILURE);
+    Q_FAIL_IF(read_line(fd, rsp, rsp_len) < 0, EXIT_FAILURE);
 
     if (cmd.type == CMD_EXIT) {
         cmd_exit(EXIT_SUCCESS);
