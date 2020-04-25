@@ -62,16 +62,15 @@ static int print_server_error(char const* msg)
  *               respectively.
  */
 
-static int send_command(int server_sock, struct command cmd)
+static int send_command(int sock, struct command cmd)
 {
     char const code = cmd_get_ctl(cmd.type);
 
     if (cmd.arg != NULL) {
-        Q_FAIL_IF(dprintf(server_sock, "%c%s\n", code, cmd.arg) < 0,
-                  EXIT_FAILURE);
-        log_print("Sent command: %c%s", code, cmd.arg);
+        Q_FAIL_IF(dprintf(sock, "%c%s\n", code, cmd.arg) < 0, EXIT_FAILURE);
+        log_print("Sent command to fd %d: %c%s", sock, code, cmd.arg);
     } else {
-        Q_FAIL_IF(dprintf(server_sock, "%c\n", code) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(dprintf(sock, "%c\n", code) < 0, EXIT_FAILURE);
         log_print("Sent command: %c", code);
     }
 
@@ -97,14 +96,14 @@ static bool msg_is_eof(char const* msg)
 
 static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
 {
-    log_print("Reading response from socket %d", sock);
     ssize_t const result = read_line(sock, rsp, rsp_len - 1);
     Q_FAIL_IF(result < 0, -1);
 
     if (msg_is_eof(rsp)) {
-        log_print("Received server response: EOF");
+        log_print("Received response from fd %d: EOF", sock);
     } else {
-        log_print("Received server response: \"%s\" (%zd bytes)", rsp, result);
+        log_print("Received response from fd %d: \"%s\" (%zd bytes)",
+                  sock, rsp, result);
     }
 
     return result;

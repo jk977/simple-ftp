@@ -214,8 +214,10 @@ int send_file(int dest_fd, int src_fd)
     size_t prev_bytes;
 
     while ((prev_bytes = read_all(src_fd, buf, BUFSIZ - 1)) > 0) {
+        log_print("Read %zu bytes to fd %d", prev_bytes, src_fd);
         size_t const written_bytes = write_str(dest_fd, buf);
         Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
+        log_print("Wrote %zu bytes to fd %d", written_bytes, dest_fd);
         memset(buf, '\0', BUFSIZ);
     }
 
@@ -321,7 +323,7 @@ int receive_path(char const* dest_path, int src_fd, unsigned int mode)
     log_print("Sending fd %d contents to %s with mode %o",
               src_fd, dest_path, mode);
 
-    int const dest_fd = open(dest_path, O_CREAT | O_EXCL, mode);
+    int const dest_fd = open(dest_path, O_WRONLY | O_CREAT | O_EXCL , mode);
     Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
     log_print("Opened %s at fd %d", dest_path, dest_fd);
 
