@@ -310,7 +310,7 @@ static int run_server(void)
     FAIL_IF(sock < 0, "listen_on", EXIT_FAILURE);
 
     while (true) {
-        struct sockaddr_in addr = {0};
+        struct sockaddr addr;
         socklen_t addr_len = sizeof(struct sockaddr_in);
         int const client_sock = accept(sock, &addr, &addr_len);
 
