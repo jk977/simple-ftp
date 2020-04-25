@@ -143,7 +143,7 @@ static int local_ls(void)
 
     if (child == 0) {
         close(pipes[1]);
-        return page_fd(pipes[0]);
+        exit(page_fd(pipes[0]));
     }
 
     close(pipes[0]);
@@ -159,6 +159,7 @@ static int handle_local_cmd(struct command cmd)
 {
     int result;
     char const* context;
+    log_print("Handling local command (pid=%u)", getpid());
 
     switch (cmd.type) {
     case CMD_LS:
@@ -175,6 +176,7 @@ static int handle_local_cmd(struct command cmd)
     }
 
     FAIL_IF(result != EXIT_SUCCESS, context, EXIT_FAILURE);
+    log_print("Finished local command (pid=%u)", getpid());
     return EXIT_SUCCESS;
 }
 
