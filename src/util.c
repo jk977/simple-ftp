@@ -11,15 +11,28 @@
 
 #include <sys/wait.h>
 
+/*
+ * is_newline: Predicate for newline characters.
+ */
+
 static int is_newline(int c)
 {
     return c == '\n';
 }
 
+/*
+ * is_nonspace: Predicate for non-space characters.
+ */
+
 static int is_nonspace(int c)
 {
     return !isspace(c);
 }
+
+/*
+ * count_chars: Return the number of characters at the beginning of `str` that
+ *              fail the predicate `reject_char()`.
+ */
 
 static size_t count_chars(char const* str, int (*reject_char)(int))
 {
@@ -37,15 +50,27 @@ static size_t count_chars(char const* str, int (*reject_char)(int))
     return len;
 }
 
+/*
+ * word_length: Returns the number of characters in the first word of `str`.
+ */
+
 size_t word_length(char const* str)
 {
     return count_chars(str, isspace);
 }
 
+/*
+ * space_length: Returns the number of spaces at the beginning of `str`.
+ */
+
 size_t space_length(char const* str)
 {
     return count_chars(str, is_nonspace);
 }
+
+/*
+ * space_length: Returns the number of characters in the first line of `str`.
+ */
 
 size_t line_length(char const* str)
 {
@@ -161,6 +186,13 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
     return EXIT_SUCCESS;
 }
 
+/*
+ * page_fd: Output the contents of `fd`, paged with `more -20`.
+ *
+ *          Returns `EXIT_SUCCESS` on successful paging, or `EXIT_FAILURE`
+ *          otherwise.
+ */
+
 int page_fd(int fd)
 {
     int pipes[2];
@@ -235,6 +267,15 @@ char const* basename_of(char const* path)
     return path + path_offset;
 }
 
+/*
+ * send_path: Put the contents of the file at `src_path` into the file
+ *            descriptor `dest_fd`.
+ *
+ *            Returns `EXIT_FAILURE` if `src_path` can't be opened (or
+ *            already exists), or if there was an error while writing the
+ *            file. Otherwise, returns `EXIT_SUCCESS`.
+ */
+
 int send_path(int dest_fd, char const* src_path)
 {
     int const src_fd = open(src_path, O_RDONLY);
@@ -245,9 +286,18 @@ int send_path(int dest_fd, char const* src_path)
     return result;
 }
 
+/*
+ * receive_path: Put the contents of the file descriptor `src_fd` into the
+ *               file at `dest_path`.
+ *
+ *               Returns `EXIT_FAILURE` if `dest_path` can't be opened (or
+ *               already exists), or if there was an error while writing the
+ *               file. Otherwise, returns `EXIT_SUCCESS`.
+ */
+
 int receive_path(char const* dest_path, int src_fd)
 {
-    int const dest_fd = open(dest_path, O_RDONLY);
+    int const dest_fd = open(dest_path, O_CREAT | O_EXCL);
     Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
     int const result = send_file(dest_fd, src_fd);
 
@@ -308,5 +358,30 @@ int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,
         char* host, socklen_t hostlen)
 {
     return getnameinfo(addr, addrlen, host, hostlen, NULL, 0, 0);
+}
+
+/*
+ * get_info: Get info about the given host and port, printing the error message
+ *           associated with the `getaddrinfo(3)` return value on failure.
+ *
+ *           Assumes that the host and port uses TCP.
+ *
+ *           Returns a pointer that must be freed with `freeaddrinfo(3)`, or
+ *           `NULL` on failure.
+ */
+
+struct addrinfo* get_info(char const* host, char const* port)
+{
+    // hints for a TCP socket
+    struct addrinfo const hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_STREAM,
+        .ai_protocol = 0
+    };
+
+    // get the actual info needed to connect client to the server
+    struct addrinfo* info = NULL;
+    GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), "getaddrinfo", NULL);
+    return info;
 }
 

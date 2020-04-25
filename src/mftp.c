@@ -14,6 +14,11 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+/*
+ * FAIL_IF_SERV_ERR: Print the server error message and return `ret` if `rsp` is
+ *                   a server error response.
+ */
+
 #define FAIL_IF_SERV_ERR(rsp, ret)      \
     do {                                \
         char const* _rsp = rsp;         \
@@ -23,7 +28,12 @@
         }                               \
     } while (0)
 
+// the file name of the program
 static char const* program;
+
+/*
+ * usage: Print program usage to the given file stream.
+ */
 
 static void usage(FILE* stream)
 {
@@ -36,24 +46,13 @@ static void usage(FILE* stream)
     fprintf(stream, "\t-d\tEnable debug output.\n");
 }
 
+/*
+ * print_server_error: Print the error given by the server response.
+ */
+
 static int print_server_error(char const* msg)
 {
     return fprintf(stderr, "Server error: %s\n", &msg[1]);
-}
-
-static struct addrinfo* get_info(char const* host, char const* port)
-{
-    // hints for a TCP socket
-    struct addrinfo const hints = {
-        .ai_family = AF_INET,
-        .ai_socktype = SOCK_STREAM,
-        .ai_protocol = 0
-    };
-
-    // get the actual info needed to connect client to the server
-    struct addrinfo* info = NULL;
-    GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), "getaddrinfo", NULL);
-    return info;
 }
 
 static int send_command(int server_sock, struct command cmd)

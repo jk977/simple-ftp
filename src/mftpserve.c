@@ -16,6 +16,10 @@
 
 static char const* program;
 
+/*
+ * usage: Print program usage to the given file stream.
+ */
+
 static void usage(FILE* stream)
 {
     fprintf(stream, "Usage:\n");
@@ -293,6 +297,11 @@ static void handle_connection(int client_sock)
         }
     }
 }
+
+/*
+ * handle_sigchld: Clean up process table and output the exit code of child
+ *                 processes when they finish.
+ */
 
 static void handle_sigchld(int signum)
 {

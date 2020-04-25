@@ -78,5 +78,6 @@ int receive_path(char const* dest_path, int src_fd);
 int make_socket(struct addrinfo const* info);
 int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,
         char* host, socklen_t hostlen);
+struct addrinfo* get_info(char const* host, char const* port);
 
 #endif // UTIL_H_
