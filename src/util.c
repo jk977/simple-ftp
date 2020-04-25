@@ -21,20 +21,29 @@ static int is_newline(int c)
 }
 
 /*
- * is_nonspace: Predicate for non-space characters.
+ * is_not_newline: Predicate for non-newline characters.
  */
 
-static int is_nonspace(int c)
+static int is_not_newline(int c)
+{
+    return !is_newline(c);
+}
+
+/*
+ * is_not_space: Predicate for non-space characters.
+ */
+
+static int is_not_space(int c)
 {
     return !isspace(c);
 }
 
 /*
  * count_chars: Return the number of characters at the beginning of `str` that
- *              fail the predicate `reject_char()`.
+ *              pass the predicate `test_char()`.
  */
 
-static size_t count_chars(char const* str, int (*reject_char)(int))
+static size_t count_chars(char const* str, int (*test_char)(int))
 {
     if (str == NULL) {
         return 0;
@@ -42,7 +51,7 @@ static size_t count_chars(char const* str, int (*reject_char)(int))
 
     size_t len = 0;
 
-    while (!reject_char(*str) && *str != '\0') {
+    while (test_char(*str) && *str != '\0') {
         ++len;
         ++str;
     }
@@ -56,7 +65,7 @@ static size_t count_chars(char const* str, int (*reject_char)(int))
 
 size_t word_length(char const* str)
 {
-    return count_chars(str, isspace);
+    return count_chars(str, is_not_space);
 }
 
 /*
@@ -65,7 +74,7 @@ size_t word_length(char const* str)
 
 size_t space_length(char const* str)
 {
-    return count_chars(str, is_nonspace);
+    return count_chars(str, isspace);
 }
 
 /*
@@ -74,7 +83,7 @@ size_t space_length(char const* str)
 
 size_t line_length(char const* str)
 {
-    return count_chars(str, is_newline);
+    return count_chars(str, is_not_newline);
 }
 
 /*
