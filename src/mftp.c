@@ -236,6 +236,12 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
     }
 
     close(data_sock);
+
+    char rsp[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response",
+            EXIT_FAILURE);
+    FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
+
     return result;
 }
 

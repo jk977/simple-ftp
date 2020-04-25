@@ -247,6 +247,10 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
 
     close(*data_sock);
     *data_sock = -1;
+
+    Q_FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, -1);
+    log_print("Sent ack over control connection");
+
     return result;
 }
 
