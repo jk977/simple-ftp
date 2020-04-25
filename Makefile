@@ -16,7 +16,7 @@ endif
 OBJECTS := logging.o util.o commands.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
-.PHONY: all paths
+.PHONY: all paths clean
 
 all: $(BUILD)/mftp $(BUILD)/mftpserve
 
@@ -29,10 +29,8 @@ $(BUILD)/mftpserve: paths $(SRC)/mftpserve.c $(OBJECT_FILES)
 $(BUILD)/%.o: $(SRC)/%.c
 	$(C) $^ -c -o $@
 
-tests: paths
-
-test-%: $(TESTS)/test_%.c
-	$(C) $(OBJECT_FILES) $^ -o $(BUILD)/$@
-
 paths:
 	mkdir -p build
+
+clean:
+	rm -f build/*
