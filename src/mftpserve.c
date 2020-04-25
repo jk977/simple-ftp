@@ -152,7 +152,8 @@ static int init_data(int client_sock)
     close(tmp_sock);
 
     addr_to_hostname((struct sockaddr*) &addr, addr_size, client, sizeof client);
-    log_print("Accepted data client at %s:%u", client, ntohs(addr.sin_port));
+    log_print("Accepted data client at %s:%u (fd=%d)",
+              client, ntohs(addr.sin_port), data_sock);
 
     return data_sock;
 }
@@ -238,7 +239,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         break;
     case CMD_PUT:
         context = "receive_path";
-        result = receive_path(basename_of(cmd.arg), *data_sock);
+        result = receive_path(basename_of(cmd.arg), *data_sock, 0666);
         break;
     default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
@@ -250,6 +251,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
     }
 
     close(*data_sock);
+    log_print("Closed data connection at fd %d", *data_sock);
     *data_sock = -1;
 
     Q_FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, -1);

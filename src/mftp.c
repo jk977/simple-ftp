@@ -131,7 +131,7 @@ static int connect_to(char const* host, char const* port)
 
     // use the provided info to connect to the given destination
     Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
-    log_print("Successfully connected to %s:%s", host, port);
+    log_print("Successfully connected to %s:%s (fd=%d)", host, port, sock);
 
     return sock;
 }
@@ -163,7 +163,10 @@ static int init_data(int server_sock, char const* host)
     FAIL_IF_SERV_ERR(rsp, -1);
 
     char const* data_port = &rsp[1];
-    return connect_to(host, data_port);
+    int const data_sock = connect_to(host, data_port);
+
+    log_print("Initialized data connection at fd %d", data_sock);
+    return data_sock;
 }
 
 /*
@@ -282,7 +285,7 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
         break;
     case CMD_GET:
         context = "receive_path";
-        result = receive_path(basename_of(cmd.arg), data_sock);
+        result = receive_path(basename_of(cmd.arg), data_sock, 0666);
         break;
     case CMD_PUT:
         context = "send_path";

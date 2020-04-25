@@ -4,8 +4,8 @@
 #include <stdlib.h>
 
 #include <ctype.h>
-#include <libgen.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -196,6 +196,33 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
 }
 
 /*
+ * send_file: Essentially the same as `sendfile(2)` (specifically, invoking
+ *            `sendfile(dest_fd, src_fd, NULL, BUFSIZ)` repeatedly until all
+ *            data is transferred) except data flows through
+ *            userspace instead of being efficiently transferred in kernel
+ *            space.
+ *
+ *            Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on successful transfer
+ *            of data or failure to transfer data, respectively.
+ */
+
+int send_file(int dest_fd, int src_fd)
+{
+    log_print("Sending fd %d contents to fd %d", src_fd, dest_fd);
+
+    char buf[BUFSIZ] = {0};
+    size_t prev_bytes;
+
+    while ((prev_bytes = read_all(src_fd, buf, BUFSIZ - 1)) > 0) {
+        size_t const written_bytes = write_str(dest_fd, buf);
+        Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
+        memset(buf, '\0', BUFSIZ);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+/*
  * page_fd: Output the contents of `fd`, paged with `more -20`.
  *
  *          Returns `EXIT_SUCCESS` on successful paging, or `EXIT_FAILURE`
@@ -211,7 +238,7 @@ int page_fd(int fd)
     Q_FAIL_IF(child < 0, EXIT_FAILURE);
 
     if (child == 0) {
-        log_print("Running `more -20` from child");
+        log_print("Running `more -20` from child %u", getpid());
         close(pipes[1]);
 
         char* const cmd[] = { "more", "-20", NULL };
@@ -221,37 +248,12 @@ int page_fd(int fd)
 
     close(pipes[0]);
 
-    log_print("Sending fd to child");
+    log_print("Sending fd %d to child %u", fd, child);
     int const status = send_file(pipes[1], fd);
     close(pipes[1]);
 
     Q_FAIL_IF(wait(NULL) < 0, EXIT_FAILURE);
     return status;
-}
-
-/*
- * send_file: Essentially the same as `sendfile(2)` (specifically, invoking
- *            `sendfile(dest_fd, src_fd, NULL, BUFSIZ)` repeatedly until all
- *            data is transferred) except data flows through
- *            userspace instead of being efficiently transferred in kernel
- *            space.
- *
- *            Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on successful transfer
- *            of data or failure to transfer data, respectively.
- */
-
-int send_file(int dest_fd, int src_fd)
-{
-    char buf[BUFSIZ] = {0};
-    size_t prev_bytes;
-
-    while ((prev_bytes = read_all(src_fd, buf, BUFSIZ - 1)) > 0) {
-        size_t const written_bytes = write_str(dest_fd, buf);
-        Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
-        memset(buf, '\0', BUFSIZ);
-    }
-
-    return EXIT_SUCCESS;
 }
 
 /*
@@ -267,13 +269,20 @@ char const* basename_of(char const* path)
 {
     size_t const path_len = strlen(path);
     char path_copy[path_len + 1];
-    memset(path_copy, '\0', sizeof(path_copy));
+    strcpy(path_copy, path);
 
     char const* base = basename(path_copy);
+
+    if (strcmp(path_copy, base) == 0) {
+        // `path` doesn't contain any slashes
+        return path;
+    }
+
     size_t const base_len = strlen(base);
     size_t const path_offset = path_len - base_len;
 
-    return path + path_offset;
+    char const* path_base = path + path_offset;
+    return path_base;
 }
 
 /*
@@ -287,10 +296,13 @@ char const* basename_of(char const* path)
 
 int send_path(int dest_fd, char const* src_path)
 {
+    log_print("Sending %s contents to fd %d", src_path, dest_fd);
+
     int const src_fd = open(src_path, O_RDONLY);
     Q_FAIL_IF(src_fd < 0, EXIT_FAILURE);
-    int const result = send_file(dest_fd, src_fd);
+    log_print("Opened %s at fd %d", src_path, src_fd);
 
+    int const result = send_file(dest_fd, src_fd);
     close(src_fd);
     return result;
 }
@@ -304,12 +316,16 @@ int send_path(int dest_fd, char const* src_path)
  *               file. Otherwise, returns `EXIT_SUCCESS`.
  */
 
-int receive_path(char const* dest_path, int src_fd)
+int receive_path(char const* dest_path, int src_fd, unsigned int mode)
 {
-    int const dest_fd = open(dest_path, O_CREAT | O_EXCL);
-    Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
-    int const result = send_file(dest_fd, src_fd);
+    log_print("Sending fd %d contents to %s with mode %o",
+              src_fd, dest_path, mode);
 
+    int const dest_fd = open(dest_path, O_CREAT | O_EXCL, mode);
+    Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
+    log_print("Opened %s at fd %d", dest_path, dest_fd);
+
+    int const result = send_file(dest_fd, src_fd);
     close(dest_fd);
     return result;
 }
