@@ -137,6 +137,30 @@ ssize_t read_line(int fd, char* buf, size_t max_bytes)
 }
 
 /*
+ * exec_to_fd: Forward the command given by `cmd` to `execvp(3)`, writing the
+ *             process' output to `fd`.
+ *
+ *             On success, returns `EXIT_SUCCESS` and stores the command return
+ *             status to `*status`. Otherwise, returns `EXIT_FAILURE` without
+ *             writing to `*status`.
+ */
+
+int exec_to_fd(int fd, int* status, char* const cmd[])
+{
+    pid_t const child = fork();
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+
+    if (child == 0) {
+        Q_FAIL_IF(dup2(fd, STDOUT_FILENO) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(dup2(STDOUT_FILENO, STDERR_FILENO) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(execvp(cmd[0], cmd) < 0, EXIT_FAILURE);
+    }
+
+    Q_FAIL_IF(wait(status) < 0, EXIT_FAILURE);
+    return EXIT_SUCCESS;
+}
+
+/*
  * send_file: Essentially the same as `sendfile(2)` (specifically, invoking
  *            `sendfile(dest_fd, src_fd, NULL, BUFSIZ)` repeatedly until all
  *            data is transferred) except data flows through
@@ -183,28 +207,24 @@ char const* basename_of(char const* path)
     return path + path_offset;
 }
 
-/*
- * exec_to_fd: Forward the command given by `cmd` to `execvp(3)`, writing the
- *             process' output to `fd`.
- *
- *             On success, returns `EXIT_SUCCESS` and stores the command return
- *             status to `*status`. Otherwise, returns `EXIT_FAILURE` without
- *             writing to `*status`.
- */
-
-int exec_to_fd(int fd, int* status, char* const cmd[])
+int send_path(int dest_fd, char const* src_path)
 {
-    pid_t const child = fork();
-    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+    int const src_fd = open(src_path, O_RDONLY);
+    Q_FAIL_IF(src_fd < 0, EXIT_FAILURE);
+    int const result = send_file(dest_fd, src_fd);
 
-    if (child == 0) {
-        Q_FAIL_IF(dup2(fd, STDOUT_FILENO) < 0, EXIT_FAILURE);
-        Q_FAIL_IF(dup2(STDOUT_FILENO, STDERR_FILENO) < 0, EXIT_FAILURE);
-        Q_FAIL_IF(execvp(cmd[0], cmd) < 0, EXIT_FAILURE);
-    }
+    close(src_fd);
+    return result;
+}
 
-    Q_FAIL_IF(wait(status) < 0, EXIT_FAILURE);
-    return EXIT_SUCCESS;
+int receive_path(char const* dest_path, int src_fd)
+{
+    int const dest_fd = open(dest_path, O_RDONLY);
+    Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
+    int const result = send_file(dest_fd, src_fd);
+
+    close(dest_fd);
+    return result;
 }
 
 /*

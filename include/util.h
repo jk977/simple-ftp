@@ -70,6 +70,9 @@ int exec_to_fd(int fd, int* status, char* const cmd[]);
 int send_file(int dest_fd, int src_fd);
 char const* basename_of(char const* path);
 
+int send_path(int dest_fd, char const* src_path);
+int receive_path(char const* dest_path, int src_fd);
+
 int make_socket(struct addrinfo const* info);
 int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,
         char* host, socklen_t hostlen);

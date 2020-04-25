@@ -27,6 +27,13 @@ static void usage(FILE* stream)
     fprintf(stream, "\t-d\tEnable debug output.\n");
 }
 
+/*
+ * send_ack: Send an acknowledge message to the given socket.
+ *
+ *           Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the
+ *           socket write was successful.
+ */
+
 static int send_ack(int sock, in_port_t const* port)
 {
     if (port != NULL) {
@@ -40,6 +47,14 @@ static int send_ack(int sock, in_port_t const* port)
     return EXIT_SUCCESS;
 }
 
+/*
+ * send_err: Send an error message to the given socket, in the format
+ *           "context: msg".
+ *
+ *           Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the
+ *           socket write was successful.
+ */
+
 static int send_err(int sock, char const* context, char const* msg)
 {
     log_print("Sending error (context=\"%s\", msg=\"%s\")", context, msg);
@@ -48,18 +63,34 @@ static int send_err(int sock, char const* context, char const* msg)
     return EXIT_SUCCESS;
 }
 
-static int respond(int client_sock, bool success, char const* context)
+/*
+ * respond: Send a response to the given socket. If `success` is true, the
+ *          response is an acknowledgement. Otherwise, the response is an error
+ *          with the contents "context: strerror(errno)".
+ *
+ *          Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the socket
+ *          write was successful.
+ *
+ *          This prints an error message if sending the response fails.
+ */
+
+static int respond(int sock, bool success, char const* context)
 {
     if (success) {
-        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS,
-                "send_ack", EXIT_FAILURE);
+        FAIL_IF(send_ack(sock, NULL) != EXIT_SUCCESS, "send_ack", EXIT_FAILURE);
     } else {
-        FAIL_IF(send_err(client_sock, context, strerror(errno)) != EXIT_SUCCESS,
+        FAIL_IF(send_err(sock, context, strerror(errno)) != EXIT_SUCCESS,
                 "send_err", EXIT_FAILURE);
     }
 
     return EXIT_SUCCESS;
 }
+
+/*
+ * listen_on: Create a socket listening on the given port.
+ *
+ *            Returns a socket file descriptor on success, or -1 otherwise.
+ */
 
 static int listen_on(in_port_t port)
 {
@@ -74,7 +105,7 @@ static int listen_on(in_port_t port)
     };
 
     // set up server to start listening for connections (any address)
-    Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof(address)) < 0,
+    Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof address) < 0,
               EXIT_FAILURE);
     Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0, EXIT_FAILURE);
     log_print("Listening on port %u", port);
@@ -82,15 +113,24 @@ static int listen_on(in_port_t port)
     return sock;
 }
 
+/*
+ * init_data: Initialize a data connection for the client, sending an
+ *            acknowledgement to the client containing the data port to connect
+ *            to.
+ *
+ *            Returns a new socket to handle the data connection with on
+ *            success, or -1 otherwise.
+ */
+
 static int init_data(int client_sock)
 {
     int const data_sock = listen_on(0);
     Q_FAIL_IF(data_sock < 0, -1);
 
-    struct sockaddr_in address;
-    socklen_t addr_size = sizeof(address);
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof addr;
 
-    if (getsockname(data_sock, (struct sockaddr*) &address, &addr_size) < 0) {
+    if (getsockname(data_sock, (struct sockaddr*) &addr, &addr_size) < 0) {
         int const old_errno = errno;
         close(data_sock);
         errno = old_errno;
@@ -98,31 +138,50 @@ static int init_data(int client_sock)
         return -1;
     }
 
-    in_port_t const port = ntohs(address.sin_port);
+    in_port_t const port = ntohs(addr.sin_port);
     log_print("Created data connection; listening on port %u", port);
 
     Q_FAIL_IF(send_ack(client_sock, &port) != EXIT_SUCCESS, -1);
     log_print("Sent ack over control connection");
 
-    char client_host[CFG_MAXHOST] = {0};
-    Q_FAIL_IF(accept(data_sock, (struct sockaddr*) &address, &addr_size) < 0, -1);
-    addr_to_hostname((struct sockaddr*) &address, addr_size,
-                     client_host, sizeof(client_host));
-    log_print("Accepted data client at %s:%u",
-              client_host, ntohs(address.sin_port));
+    char client[CFG_MAXHOST] = {0};
+    Q_FAIL_IF(accept(data_sock, (struct sockaddr*) &addr, &addr_size) < 0, -1);
+    addr_to_hostname((struct sockaddr*) &addr, addr_size, client, sizeof client);
+    log_print("Accepted data client at %s:%u", client, ntohs(addr.sin_port));
 
     return data_sock;
 }
 
+/*
+ * server_exit: Send an acknowledgement to the client, then close the 
+ *              connection and exit.
+ *
+ *              Exits with `EXIT_SUCCESS` on successful acknowledgement,
+ *              or `EXIT_FAILURE` otherwise.
+ *
+ *              This prints an error message if the acknowledgement fails.
+ */
+
 static void server_exit(int client_sock)
 {
-    if (send_ack(client_sock, NULL) != EXIT_SUCCESS) {
+    int status = send_ack(client_sock, NULL);
+
+    if (status != EXIT_SUCCESS) {
         ERRMSG("send_ack", strerror(errno));
-        cmd_exit(EXIT_FAILURE);
-    } else {
-        cmd_exit(EXIT_SUCCESS);
     }
+
+    close(client_sock);
+    cmd_exit(status);
 }
+
+/*
+ * handle_local_cmd: Run a command that does not require a data connection.
+ *
+ *                   Returns `EXIT_SUCCESS` if command was successful, or
+ *                   `EXIT_FAILURE` otherwise.
+ *
+ *                   This prints an error message if the command fails.
+ */
 
 static int handle_local_cmd(int client_sock, int* data_sock,
         enum cmd_type cmd, char const* arg)
@@ -143,6 +202,15 @@ static int handle_local_cmd(int client_sock, int* data_sock,
     }
 }
 
+/*
+ * handle_data_cmd: Run a command that requires a data connection.
+ *
+ *                  Returns `EXIT_SUCCESS` if command was successful, or
+ *                  `EXIT_FAILURE` otherwise.
+ *
+ *                  This prints an error message if the command fails.
+ */
+
 static int handle_data_cmd(int client_sock, int* data_sock,
         enum cmd_type cmd, char const* arg)
 {
@@ -157,30 +225,35 @@ static int handle_data_cmd(int client_sock, int* data_sock,
     FAIL_IF(send_ack(*data_sock, NULL) != EXIT_SUCCESS, "send_ack",
             EXIT_FAILURE);
 
-    (void) arg;
-    bool success = false;
-    char const* context = NULL;
+    int result;
+    char const* context;
 
     if (cmd == CMD_RLS) {
-        int status = -1;
         context = "cmd_ls";
-        success = cmd_ls(*data_sock, &status) == EXIT_SUCCESS;
-        log_print("Exit status (ls): %d", status);
-    } else if (cmd == CMD_GET) {
-        context = "get";
-    } else if (cmd == CMD_SHOW) {
-        context = "show";
+        result = cmd_ls(*data_sock, NULL);
+    } else if (cmd == CMD_GET || cmd == CMD_SHOW) {
+        context = "send_path";
+        result = send_path(*data_sock, arg);
     } else if (cmd == CMD_PUT) {
-        context = "put";
+        context = "receive_path";
+        result = receive_path(basename_of(arg), *data_sock);
     } else {
-        context = "Unknown command";
         log_print("Unexpected command %d; check info table for accuracy", cmd);
+        return EXIT_FAILURE;
+    }
+
+    if (result != EXIT_SUCCESS) {
+        ERRMSG(context, strerror(errno));
     }
 
     close(*data_sock);
     *data_sock = -1;
-    return respond(client_sock, success, context);
+    return result;
 }
+
+/*
+ * process_command: Process the command contained in the given message.
+ */
 
 static int process_command(int client_sock, int* data_sock, char const* msg)
 {
@@ -206,7 +279,7 @@ static void handle_connection(int client_sock)
     while (true) {
         char message[CFG_MAXLINE] = {0};
 
-        if (read_line(client_sock, message, CFG_MAXLINE - 1) > 0) {
+        if (read_line(client_sock, message, sizeof(message) - 1) > 0) {
             process_command(client_sock, &data_sock, message);
         } else {
             log_print("Failed to receive message from client");
@@ -237,7 +310,7 @@ static int run_server(void)
     FAIL_IF(sock < 0, "listen_on", EXIT_FAILURE);
 
     while (true) {
-        struct sockaddr addr = {0};
+        struct sockaddr_in addr = {0};
         socklen_t addr_len = sizeof(struct sockaddr_in);
         int const client_sock = accept(sock, &addr, &addr_len);
 
@@ -251,17 +324,16 @@ static int run_server(void)
             continue;
         }
 
-        char hostname[CFG_MAXHOST] = {0};
-        GAI_FAIL_IF(addr_to_hostname(&addr, addr_len, hostname, CFG_MAXHOST),
+        char host[CFG_MAXHOST] = {0};
+        GAI_FAIL_IF(addr_to_hostname(&addr, addr_len, host, sizeof host),
                     "addr_to_hostname", EXIT_FAILURE);
-
-        printf("Accepted connection from %s\n", hostname);
+        printf("Accepted connection from %s\n", host);
 
         // fork to have the child handle client so the parent can keep listening
-        pid_t const current_pid = fork();
-        FAIL_IF(current_pid < 0, "fork", EXIT_FAILURE);
+        pid_t const child = fork();
+        FAIL_IF(child < 0, "fork", EXIT_FAILURE);
 
-        if (current_pid == 0) {
+        if (child == 0) {
             handle_connection(client_sock);
         }
 

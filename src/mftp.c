@@ -74,7 +74,7 @@ static int connect_to(char const* host, char const* port)
     return sock;
 }
 
-static int send_cmd(int server_sock, enum cmd_type cmd, char const* arg)
+static int send_command(int server_sock, enum cmd_type cmd, char const* arg)
 {
     char const code = cmd_get_ctl(cmd);
 
@@ -87,6 +87,25 @@ static int send_cmd(int server_sock, enum cmd_type cmd, char const* arg)
     }
 
     return EXIT_SUCCESS;
+}
+
+static ssize_t get_response(int server_sock, char* rsp, size_t rsp_len)
+{
+    ssize_t const result = read_line(server_sock, rsp, rsp_len - 1);
+    Q_FAIL_IF(result < 0, -1);
+
+    if (rsp[0] == '\0') {
+        log_print("Received server response: EOF");
+    } else {
+        log_print("Received server response: \"%s\" (%zu bytes)", rsp, result);
+    }
+
+    return result;
+}
+
+static bool msg_is_eof(char const* msg)
+{
+    return msg[0] == '\0';
 }
 
 static int handle_local_cmd(enum cmd_type cmd, char const* arg)
@@ -104,40 +123,44 @@ static int handle_local_cmd(enum cmd_type cmd, char const* arg)
     }
 }
 
-static int get_response(int server_sock, char* rsp, size_t rsp_len)
+static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
+        char const* arg)
 {
-    Q_FAIL_IF(read_line(server_sock, rsp, rsp_len) < 0, EXIT_FAILURE);
-    log_print("Received server response: %s", rsp);
-    return EXIT_SUCCESS;
-}
-
-static int handle_remote_cmd(int server_sock, enum cmd_type cmd, char const* arg)
-{
-    FAIL_IF(send_cmd(server_sock, cmd, arg) != EXIT_SUCCESS, "send_cmd",
+    FAIL_IF(send_command(server_sock, cmd, arg) != EXIT_SUCCESS, "send_command",
             EXIT_FAILURE);
 
-    char response[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, response, sizeof(response) - 1) < 0,
-            "get_response", EXIT_FAILURE);
+    char rsp[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response",
+            EXIT_FAILURE);
+
+    if (msg_is_eof(rsp)) {
+        ERRMSG("get_response", "Unexpected EOF received.");
+        return EXIT_FAILURE;
+    }
 
     if (cmd == CMD_EXIT) {
         cmd_exit(EXIT_SUCCESS);
     }
 
-    FAIL_IF_SERV_ERR(response, EXIT_FAILURE);
+    FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
 static int init_data(int server_sock, char const* host)
 {
-    FAIL_IF(send_cmd(server_sock, CMD_DATA, NULL) < 0, "send_cmd", -1);
+    FAIL_IF(send_command(server_sock, CMD_DATA, NULL) < 0, "send_command", -1);
 
-    char response[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, response, sizeof(response) - 1) < 0,
-            "get_response", -1);
-    FAIL_IF_SERV_ERR(response, -1);
+    char rsp[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response", -1);
 
-    char const* data_port = &response[1];
+    if (msg_is_eof(rsp)) {
+        ERRMSG("get_response", "Unexpected EOF received.");
+        return EXIT_FAILURE;
+    }
+
+    FAIL_IF_SERV_ERR(rsp, -1);
+
+    char const* data_port = &rsp[1];
     return connect_to(host, data_port);
 }
 
@@ -146,47 +169,43 @@ static int handle_data_cmd(int server_sock, char const* host,
 {
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-    FAIL_IF(send_cmd(server_sock, cmd, arg) != EXIT_SUCCESS, "send_cmd",
+    FAIL_IF(send_command(server_sock, cmd, arg) != EXIT_SUCCESS, "send_command",
             EXIT_FAILURE);
 
-    char response[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(data_sock, response, sizeof(response) - 1) < 0,
-            "get_response", EXIT_FAILURE);
-    FAIL_IF_SERV_ERR(response, EXIT_FAILURE);
+    char rsp[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(data_sock, rsp, sizeof rsp) < 0, "get_response",
+            EXIT_FAILURE);
+
+    if (msg_is_eof(rsp)) {
+        ERRMSG("get_response", "Unexpected EOF received.");
+        return EXIT_FAILURE;
+    }
+
+    FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
+
+    char const* context;
+    int result;
 
     if (cmd == CMD_LS || cmd == CMD_SHOW) {
-        FAIL_IF(send_file(STDOUT_FILENO, data_sock) < 0, "send_file",
-                EXIT_FAILURE);
+        context = "send_file";
+        result = send_file(STDOUT_FILENO, data_sock);
     } else if (cmd == CMD_GET) {
-        int const dest_fd = open(basename_of(arg), O_CREAT | O_EXCL);
-        FAIL_IF(dest_fd < 0, "open", EXIT_FAILURE);
-
-        if (send_file(dest_fd, data_sock) < 0) {
-            perror("send_file");
-            close(data_sock);
-            close(dest_fd);
-            return EXIT_FAILURE;
-        }
-
-        close(dest_fd);
+        context = "receive_path";
+        result = receive_path(basename_of(arg), data_sock);
     } else if (cmd == CMD_PUT) {
-        int const src_fd = open(arg, O_RDONLY);
-        FAIL_IF(src_fd < 0, "open", EXIT_FAILURE);
+        context = "send_path";
+        result = send_path(data_sock, arg);
+    } else {
+        log_print("Unexpected command %d; check info table for accuracy", cmd);
+        return EXIT_FAILURE;
+    }
 
-        if (send_file(data_sock, src_fd) < 0) {
-            int const old_errno = errno;
-            close(data_sock);
-            close(src_fd);
-            errno = old_errno;
-
-            return EXIT_FAILURE;
-        }
-
-        close(src_fd);
+    if (result != EXIT_SUCCESS) {
+        ERRMSG(context, strerror(errno));
     }
 
     close(data_sock);
-    return EXIT_SUCCESS;
+    return result;
 }
 
 static int run_command(int server_sock, char const* host, char const* msg)
