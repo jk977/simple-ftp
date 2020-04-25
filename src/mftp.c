@@ -55,13 +55,14 @@ static struct addrinfo* get_info(char const* host, char const* port)
     return info;
 }
 
-static int send_command(int server_sock, enum cmd_type cmd, char const* arg)
+static int send_command(int server_sock, struct command cmd)
 {
-    char const code = cmd_get_ctl(cmd);
+    char const code = cmd_get_ctl(cmd.type);
 
-    if (arg != NULL) {
-        Q_FAIL_IF(dprintf(server_sock, "%c%s\n", code, arg) < 0, EXIT_FAILURE);
-        log_print("Sent command: %c%s", code, arg);
+    if (cmd.arg != NULL) {
+        Q_FAIL_IF(dprintf(server_sock, "%c%s\n", code, cmd.arg) < 0,
+                  EXIT_FAILURE);
+        log_print("Sent command: %c%s", code, cmd.arg);
     } else {
         Q_FAIL_IF(dprintf(server_sock, "%c\n", code) < 0, EXIT_FAILURE);
         log_print("Sent command: %c", code);
@@ -110,7 +111,8 @@ static int connect_to(char const* host, char const* port)
 
 static int init_data(int server_sock, char const* host)
 {
-    FAIL_IF(send_command(server_sock, CMD_DATA, NULL) < 0, "send_command", -1);
+    struct command data_cmd = { .type = CMD_DATA, .arg = NULL };
+    FAIL_IF(send_command(server_sock, data_cmd) < 0, "send_command", -1);
 
     char rsp[CFG_MAXLINE] = {0};
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response", -1);
@@ -126,25 +128,24 @@ static int init_data(int server_sock, char const* host)
     return connect_to(host, data_port);
 }
 
-static int handle_local_cmd(enum cmd_type cmd, char const* arg)
+static int handle_local_cmd(struct command cmd)
 {
-    switch (cmd) {
+    switch (cmd.type) {
     case CMD_LS:
         FAIL_IF(cmd_ls(STDOUT_FILENO) != EXIT_SUCCESS, "cmd_ls", EXIT_FAILURE);
         return EXIT_SUCCESS;
     case CMD_CD:
-        FAIL_IF(cmd_chdir(arg) != EXIT_SUCCESS, "cmd_chdir", EXIT_FAILURE);
+        FAIL_IF(cmd_chdir(cmd.arg) != EXIT_SUCCESS, "cmd_chdir", EXIT_FAILURE);
         return EXIT_SUCCESS;
     default:
-        log_print("Unexpected command %d; check info table for accuracy", cmd);
+        log_print("Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
 }
 
-static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
-        char const* arg)
+static int handle_remote_cmd(int server_sock, struct command cmd)
 {
-    FAIL_IF(send_command(server_sock, cmd, arg) != EXIT_SUCCESS, "send_command",
+    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, "send_command",
             EXIT_FAILURE);
 
     char rsp[CFG_MAXLINE] = {0};
@@ -156,7 +157,7 @@ static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
         return EXIT_FAILURE;
     }
 
-    if (cmd == CMD_EXIT) {
+    if (cmd.type == CMD_EXIT) {
         cmd_exit(EXIT_SUCCESS);
     }
 
@@ -164,12 +165,11 @@ static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
     return EXIT_SUCCESS;
 }
 
-static int handle_data_cmd(int server_sock, char const* host,
-        enum cmd_type cmd, char const* arg)
+static int handle_data_cmd(int server_sock, char const* host, struct command cmd)
 {
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-    FAIL_IF(send_command(server_sock, cmd, arg) != EXIT_SUCCESS, "send_command",
+    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, "send_command",
             EXIT_FAILURE);
 
     char rsp[CFG_MAXLINE] = {0};
@@ -186,7 +186,7 @@ static int handle_data_cmd(int server_sock, char const* host,
     char const* context;
     int result;
 
-    switch (cmd) {
+    switch (cmd.type) {
     case CMD_RLS:
     case CMD_SHOW:
         context = "send_file";
@@ -194,11 +194,11 @@ static int handle_data_cmd(int server_sock, char const* host,
         break;
     case CMD_GET:
         context = "receive_path";
-        result = receive_path(basename_of(arg), data_sock);
+        result = receive_path(basename_of(cmd.arg), data_sock);
         break;
     case CMD_PUT:
         context = "send_path";
-        result = send_path(data_sock, arg);
+        result = send_path(data_sock, cmd.arg);
         break;
     default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
@@ -215,20 +215,19 @@ static int handle_data_cmd(int server_sock, char const* host,
 
 static int run_command(int server_sock, char const* host, char const* msg)
 {
-    char const* arg;
-    enum cmd_type cmd = cmd_parse(msg, &arg);
+    struct command cmd = cmd_parse(msg);
 
-    if (cmd == CMD_INVALID) {
+    if (cmd.type == CMD_INVALID) {
         printf("Unrecognized command: \"%s\"\n", msg);
         return EXIT_FAILURE;
     }
 
-    if (!cmd_is_remote(cmd)) {
-        return handle_local_cmd(cmd, arg);
-    } else if (!cmd_needs_data(cmd)) {
-        return handle_remote_cmd(server_sock, cmd, arg);
+    if (!cmd_is_remote(cmd.type)) {
+        return handle_local_cmd(cmd);
+    } else if (!cmd_needs_data(cmd.type)) {
+        return handle_remote_cmd(server_sock, cmd);
     } else {
-        return handle_data_cmd(server_sock, host, cmd, arg);
+        return handle_data_cmd(server_sock, host, cmd);
     }
 }
 

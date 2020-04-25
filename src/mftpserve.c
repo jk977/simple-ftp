@@ -180,15 +180,15 @@ static void server_exit(int client_sock)
  *                   `EXIT_FAILURE` otherwise.
  */
 
-static int handle_local_cmd(int client_sock, int* data_sock,
-        enum cmd_type cmd, char const* arg)
+static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
 {
-    switch (cmd) {
+    switch (cmd.type) {
     case CMD_EXIT:
         server_exit(client_sock);
         return EXIT_FAILURE; // unreachable
     case CMD_RCD:
-        return respond(client_sock, cmd_chdir(arg) == EXIT_SUCCESS, "cmd_chdir");
+        return respond(client_sock, cmd_chdir(cmd.arg) == EXIT_SUCCESS,
+                       "cmd_chdir");
     case CMD_DATA:
         *data_sock = init_data(client_sock);
 
@@ -209,8 +209,7 @@ static int handle_local_cmd(int client_sock, int* data_sock,
  *                  This prints an error message if the command fails.
  */
 
-static int handle_data_cmd(int client_sock, int* data_sock,
-        enum cmd_type cmd, char const* arg)
+static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
 {
     // make sure data connection has been created
     if (*data_sock < 0) {
@@ -226,7 +225,7 @@ static int handle_data_cmd(int client_sock, int* data_sock,
     int result;
     char const* context;
 
-    switch (cmd) {
+    switch (cmd.type) {
     case CMD_RLS:
         context = "cmd_ls";
         result = cmd_ls(*data_sock);
@@ -234,11 +233,11 @@ static int handle_data_cmd(int client_sock, int* data_sock,
     case CMD_GET:
     case CMD_SHOW:
         context = "send_path";
-        result = send_path(*data_sock, arg);
+        result = send_path(*data_sock, cmd.arg);
         break;
     case CMD_PUT:
         context = "receive_path";
-        result = receive_path(basename_of(arg), *data_sock);
+        result = receive_path(basename_of(cmd.arg), *data_sock);
         break;
     default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
@@ -261,13 +260,16 @@ static int handle_data_cmd(int client_sock, int* data_sock,
 static int process_command(int client_sock, int* data_sock, char const* msg)
 {
     log_print("Received command from client: %s", msg);
-    enum cmd_type cmd = cmd_get_type(msg[0]);
-    char const* arg = &msg[1];
 
-    if (!cmd_needs_data(cmd)) {
-        return handle_local_cmd(client_sock, data_sock, cmd, arg);
+    struct command cmd = {
+        .type = cmd_get_type(msg[0]),
+        .arg = &msg[1],
+    };
+
+    if (!cmd_needs_data(cmd.type)) {
+        return handle_local_cmd(client_sock, data_sock, cmd);
     } else {
-        return handle_data_cmd(client_sock, data_sock, cmd, arg);
+        return handle_data_cmd(client_sock, data_sock, cmd);
     }
 }
 

@@ -81,10 +81,12 @@ bool cmd_needs_data(enum cmd_type cmd)
     }
 }
 
-enum cmd_type cmd_parse(char const* msg, char const** p_arg)
+struct command cmd_parse(char const* msg)
 {
-    enum cmd_type result = CMD_INVALID;
-    *p_arg = NULL;
+    struct command result = {
+        .type = CMD_INVALID,
+        .arg = NULL,
+    };
 
     // get pointer to beginning of command argument
     size_t const cmd_len = word_length(msg);
@@ -92,31 +94,32 @@ enum cmd_type cmd_parse(char const* msg, char const** p_arg)
     arg += space_length(arg);
 
     if (arg[0] != '\0') {
-        *p_arg = arg;
+        result.arg = arg;
     }
 
     if (strncmp(msg, "exit", cmd_len) == 0) {
-        result = CMD_EXIT;
+        result.type = CMD_EXIT;
     } else if (strncmp(msg, "cd", cmd_len) == 0) {
-        result = CMD_CD;
+        result.type = CMD_CD;
     } else if (strncmp(msg, "rcd", cmd_len) == 0) {
-        result = CMD_RCD;
+        result.type = CMD_RCD;
     } else if (strncmp(msg, "ls", cmd_len) == 0) {
-        result = CMD_LS;
+        result.type = CMD_LS;
     } else if (strncmp(msg, "rls", cmd_len) == 0) {
-        result = CMD_RLS;
+        result.type = CMD_RLS;
     } else if (strncmp(msg, "get", cmd_len) == 0) {
-        result = CMD_GET;
+        result.type = CMD_GET;
     } else if (strncmp(msg, "show", cmd_len) == 0) {
-        result = CMD_SHOW;
+        result.type = CMD_SHOW;
     } else if (strncmp(msg, "put", cmd_len) == 0) {
-        result = CMD_PUT;
+        result.type = CMD_PUT;
     }
 
     bool const has_arg = (arg[0] != '\0');
+    bool const needs_arg = info_table[result.type].has_arg;
 
-    if (result != CMD_INVALID && info_table[result].has_arg != has_arg) {
-        result = CMD_INVALID;
+    if (result.type != CMD_INVALID && needs_arg != has_arg) {
+        result.type = CMD_INVALID;
     }
 
     return result;

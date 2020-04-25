@@ -22,12 +22,17 @@ enum rsp_code {
     RSP_ERR = 'E',
 };
 
+struct command {
+    enum cmd_type type;
+    char const* arg;
+};
+
 enum cmd_type cmd_get_type(char code);
 int cmd_get_ctl(enum cmd_type cmd);
 bool cmd_is_remote(enum cmd_type cmd);
 bool cmd_needs_data(enum cmd_type cmd);
 
-enum cmd_type cmd_parse(char const* msg, char const** p_arg);
+struct command cmd_parse(char const* msg);
 
 void cmd_exit(int status);
 int cmd_chdir(char const* path);
