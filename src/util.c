@@ -1,4 +1,5 @@
 #include "util.h"
+#include "logging.h"
 
 #include <stdlib.h>
 
@@ -117,7 +118,7 @@ static ssize_t read_until(int fd, char* buf, size_t max_bytes,
  *           Returns the total number of bytes read.
  */
 
-ssize_t read_all(int fd, char* buf, size_t max_bytes)
+static ssize_t read_all(int fd, char* buf, size_t max_bytes)
 {
     return read_until(fd, buf, max_bytes, NULL);
 }
@@ -158,6 +159,33 @@ int exec_to_fd(int fd, int* status, char* const cmd[])
 
     Q_FAIL_IF(wait(status) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
+}
+
+int page_fd(int fd)
+{
+    int pipes[2];
+    Q_FAIL_IF(pipe(pipes) < 0, EXIT_FAILURE);
+
+    pid_t const child = fork();
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+
+    if (child == 0) {
+        log_print("Running `more -20` from child");
+        close(pipes[1]);
+
+        char* const cmd[] = { "more", "-20", NULL };
+        Q_FAIL_IF(dup2(pipes[0], STDIN_FILENO) < 0, EXIT_FAILURE);
+        Q_FAIL_IF(execvp(cmd[0], cmd) < 0, EXIT_FAILURE);
+    }
+
+    close(pipes[0]);
+
+    log_print("Sending fd to child");
+    int const status = send_file(pipes[1], fd);
+    close(pipes[1]);
+
+    Q_FAIL_IF(wait(NULL) < 0, EXIT_FAILURE);
+    return status;
 }
 
 /*

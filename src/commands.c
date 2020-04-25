@@ -141,7 +141,7 @@ int cmd_chdir(char const* path)
 int cmd_ls(int fd)
 {
     int status;
-    char* cmd[] = { "ls", "-l", NULL };
+    char* const cmd[] = { "ls", "-l", NULL };
     log_print("Executing `ls -l`");
     Q_FAIL_IF(exec_to_fd(fd, &status, cmd) != EXIT_SUCCESS, -1);
     return status;

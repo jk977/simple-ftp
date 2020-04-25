@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define FAIL_IF_SERV_ERR(rsp, ret)      \
     do {                                \
@@ -71,23 +72,24 @@ static int send_command(int server_sock, struct command cmd)
     return EXIT_SUCCESS;
 }
 
-static ssize_t get_response(int server_sock, char* rsp, size_t rsp_len)
+static bool msg_is_eof(char const* msg)
 {
-    ssize_t const result = read_line(server_sock, rsp, rsp_len - 1);
+    return msg[0] == '\0';
+}
+
+static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
+{
+    log_print("Reading response from socket %d", sock);
+    ssize_t const result = read_line(sock, rsp, rsp_len - 1);
     Q_FAIL_IF(result < 0, -1);
 
-    if (rsp[0] == '\0') {
+    if (msg_is_eof(rsp)) {
         log_print("Received server response: EOF");
     } else {
         log_print("Received server response: \"%s\" (%zd bytes)", rsp, result);
     }
 
     return result;
-}
-
-static bool msg_is_eof(char const* msg)
-{
-    return msg[0] == '\0';
 }
 
 static int connect_to(char const* host, char const* port)
@@ -111,7 +113,7 @@ static int connect_to(char const* host, char const* port)
 
 static int init_data(int server_sock, char const* host)
 {
-    struct command data_cmd = { .type = CMD_DATA, .arg = NULL };
+    struct command const data_cmd = { .type = CMD_DATA, .arg = NULL };
     FAIL_IF(send_command(server_sock, data_cmd) < 0, "send_command", -1);
 
     char rsp[CFG_MAXLINE] = {0};
@@ -119,7 +121,10 @@ static int init_data(int server_sock, char const* host)
 
     if (msg_is_eof(rsp)) {
         ERRMSG("get_response", "Unexpected EOF received.");
-        return EXIT_FAILURE;
+        return -1;
+    } else if (rsp[1] == '\0') {
+        ERRMSG("get_response", "Expected a port number");
+        return -1;
     }
 
     FAIL_IF_SERV_ERR(rsp, -1);
@@ -128,19 +133,49 @@ static int init_data(int server_sock, char const* host)
     return connect_to(host, data_port);
 }
 
+static int local_ls(void)
+{
+    int pipes[2];
+    Q_FAIL_IF(pipe(pipes) < 0, EXIT_FAILURE);
+
+    pid_t const child = fork();
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+
+    if (child == 0) {
+        close(pipes[1]);
+        return page_fd(pipes[0]);
+    }
+
+    close(pipes[0]);
+    Q_FAIL_IF(cmd_ls(pipes[1]) != EXIT_SUCCESS, EXIT_FAILURE);
+    close(pipes[1]);
+
+    int status;
+    Q_FAIL_IF(wait(&status) < 0, EXIT_FAILURE);
+    return status;
+}
+
 static int handle_local_cmd(struct command cmd)
 {
+    int result;
+    char const* context;
+
     switch (cmd.type) {
     case CMD_LS:
-        FAIL_IF(cmd_ls(STDOUT_FILENO) != EXIT_SUCCESS, "cmd_ls", EXIT_FAILURE);
-        return EXIT_SUCCESS;
+        result = local_ls();
+        context = "local_ls";
+        break;
     case CMD_CD:
-        FAIL_IF(cmd_chdir(cmd.arg) != EXIT_SUCCESS, "cmd_chdir", EXIT_FAILURE);
-        return EXIT_SUCCESS;
+        result = cmd_chdir(cmd.arg);
+        context = "cmd_chdir";
+        break;
     default:
         log_print("Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
+
+    FAIL_IF(result != EXIT_SUCCESS, context, EXIT_FAILURE);
+    return EXIT_SUCCESS;
 }
 
 static int handle_remote_cmd(int server_sock, struct command cmd)
@@ -189,8 +224,8 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
     switch (cmd.type) {
     case CMD_RLS:
     case CMD_SHOW:
-        context = "send_file";
-        result = send_file(STDOUT_FILENO, data_sock);
+        context = "page_fd";
+        result = page_fd(data_sock);
         break;
     case CMD_GET:
         context = "receive_path";
