@@ -219,9 +219,6 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         return EXIT_SUCCESS;
     }
 
-    FAIL_IF(send_ack(*data_sock, NULL) != EXIT_SUCCESS, "send_ack",
-            EXIT_FAILURE);
-
     int result;
     char const* context;
 

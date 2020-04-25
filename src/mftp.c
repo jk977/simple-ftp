@@ -207,17 +207,6 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
     FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, "send_command",
             EXIT_FAILURE);
 
-    char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(data_sock, rsp, sizeof rsp) < 0, "get_response",
-            EXIT_FAILURE);
-
-    if (msg_is_eof(rsp)) {
-        ERRMSG("get_response", "Unexpected EOF received.");
-        return EXIT_FAILURE;
-    }
-
-    FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
-
     char const* context;
     int result;
 
