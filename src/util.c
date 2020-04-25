@@ -323,7 +323,7 @@ int receive_path(char const* dest_path, int src_fd, unsigned int mode)
     log_print("Sending fd %d contents to %s with mode %o",
               src_fd, dest_path, mode);
 
-    int const dest_fd = open(dest_path, O_WRONLY | O_CREAT | O_EXCL , mode);
+    int const dest_fd = open(dest_path, O_WRONLY | O_CREAT | O_EXCL, mode);
     Q_FAIL_IF(dest_fd < 0, EXIT_FAILURE);
     log_print("Opened %s at fd %d", dest_path, dest_fd);
 
