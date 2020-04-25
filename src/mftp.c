@@ -55,6 +55,13 @@ static int print_server_error(char const* msg)
     return fprintf(stderr, "Server error: %s\n", &msg[1]);
 }
 
+/*
+ * send_command: Send `cmd` to `server_sock`.
+ *
+ *               Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on success or failure,
+ *               respectively.
+ */
+
 static int send_command(int server_sock, struct command cmd)
 {
     char const code = cmd_get_ctl(cmd.type);
@@ -71,10 +78,22 @@ static int send_command(int server_sock, struct command cmd)
     return EXIT_SUCCESS;
 }
 
+/*
+ * msg_is_eof: Predicate for EOF server responses.
+ */
+
 static bool msg_is_eof(char const* msg)
 {
     return msg[0] == '\0';
 }
+
+/*
+ * get_response: Receive a response of max length `rsp_len - 1` from `sock` and
+ *               store into `rsp`.
+ *
+ *               Returns the number of bytes stored in `rsp` on success, or -1
+ *               on failure.
+ */
 
 static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
 {
@@ -90,6 +109,13 @@ static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
 
     return result;
 }
+
+/*
+ * connect_to: Connect to the given host and port.
+ *
+ *             Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *             respectively.
+ */
 
 static int connect_to(char const* host, char const* port)
 {
@@ -109,6 +135,14 @@ static int connect_to(char const* host, char const* port)
 
     return sock;
 }
+
+/*
+ * init_data: Initialize a data connection with the server at `host`,
+ *            communicating through `server_sock`.
+ *
+ *            Returns the socket to send and receive data through on success,
+ *            or -1 on failure.
+ */
 
 static int init_data(int server_sock, char const* host)
 {
@@ -132,6 +166,13 @@ static int init_data(int server_sock, char const* host)
     return connect_to(host, data_port);
 }
 
+/*
+ * local_ls: Execute `cmd_ls()` locally, paging its output.
+ *
+ *           Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *           respectively.
+ */
+
 static int local_ls(void)
 {
     int pipes[2];
@@ -154,11 +195,17 @@ static int local_ls(void)
     return status;
 }
 
+/*
+ * handle_local_cmd: Execute `cmd` locally, printing an error message on failure.
+ *
+ *                   Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *                   respectively.
+ */
+
 static int handle_local_cmd(struct command cmd)
 {
     int result;
     char const* context;
-    log_print("Handling local command (pid=%u)", getpid());
 
     switch (cmd.type) {
     case CMD_LS:
@@ -175,9 +222,16 @@ static int handle_local_cmd(struct command cmd)
     }
 
     FAIL_IF(result != EXIT_SUCCESS, context, EXIT_FAILURE);
-    log_print("Finished local command (pid=%u)", getpid());
     return EXIT_SUCCESS;
 }
+
+/*
+ * handle_remote_cmd: Send `cmd` to `server_sock` to be executed, printing an
+ *                    error message on failure.
+ *
+ *                    Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *                    respectively.
+ */
 
 static int handle_remote_cmd(int server_sock, struct command cmd)
 {
@@ -200,6 +254,15 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
     FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
+
+/*
+ * handle_data_cmd: Establish a data connection with the server and execute `cmd`
+ *                  both locally and remotely, printing an error message on
+ *                  failure.
+ *
+ *                  Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *                  respectively.
+ */
 
 static int handle_data_cmd(int server_sock, char const* host, struct command cmd)
 {
@@ -244,6 +307,14 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
     return result;
 }
 
+/*
+ * run_command: Run the command contained in the user input `msg` with the
+ *              server at `host`, communicating via `server_sock`.
+ *
+ *              Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *              respectively.
+ */
+
 static int run_command(int server_sock, char const* host, char const* msg)
 {
     struct command cmd = cmd_parse(msg);
@@ -261,6 +332,13 @@ static int run_command(int server_sock, char const* host, char const* msg)
         return handle_data_cmd(server_sock, host, cmd);
     }
 }
+
+/*
+ * client_run: Run the client, connecting to the server at `hostname`.
+ *
+ *             Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *             respectively.
+ */
 
 static int client_run(char const* hostname)
 {
