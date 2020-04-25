@@ -29,10 +29,8 @@ bool cmd_needs_data(enum cmd_type cmd);
 
 enum cmd_type cmd_parse(char const* msg, char const** p_arg);
 
-int cmd_exec_msg(int fd, char const* msg, char* rsp, size_t rsp_len);
-
 void cmd_exit(int status);
 int cmd_chdir(char const* path);
-int cmd_ls(int fd, int* status);
+int cmd_ls(int fd);
 
 #endif // COMMANDS_H_

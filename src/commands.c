@@ -135,9 +135,11 @@ int cmd_chdir(char const* path)
     return EXIT_SUCCESS;
 }
 
-int cmd_ls(int fd, int* status)
+int cmd_ls(int fd)
 {
+    int status;
     char* cmd[] = { "ls", "-l", NULL };
     log_print("Executing `ls -l`");
-    return exec_to_fd(fd, status, cmd);
+    Q_FAIL_IF(exec_to_fd(fd, &status, cmd) != EXIT_SUCCESS, -1);
+    return status;
 }

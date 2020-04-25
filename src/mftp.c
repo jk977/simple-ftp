@@ -128,14 +128,14 @@ static int init_data(int server_sock, char const* host)
 
 static int handle_local_cmd(enum cmd_type cmd, char const* arg)
 {
-    if (cmd == CMD_LS) {
-        int status = -1;
-        int result = cmd_ls(STDOUT_FILENO, &status);
-        log_print("`ls` exit status: %d", status);
-        return result;
-    } else if (cmd == CMD_CD) {
-        return cmd_chdir(arg);
-    } else {
+    switch (cmd) {
+    case CMD_LS:
+        FAIL_IF(cmd_ls(STDOUT_FILENO) != EXIT_SUCCESS, "cmd_ls", EXIT_FAILURE);
+        return EXIT_SUCCESS;
+    case CMD_CD:
+        FAIL_IF(cmd_chdir(arg) != EXIT_SUCCESS, "cmd_chdir", EXIT_FAILURE);
+        return EXIT_SUCCESS;
+    default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
         return EXIT_FAILURE;
     }
@@ -186,16 +186,21 @@ static int handle_data_cmd(int server_sock, char const* host,
     char const* context;
     int result;
 
-    if (cmd == CMD_RLS || cmd == CMD_SHOW) {
+    switch (cmd) {
+    case CMD_RLS:
+    case CMD_SHOW:
         context = "send_file";
         result = send_file(STDOUT_FILENO, data_sock);
-    } else if (cmd == CMD_GET) {
+        break;
+    case CMD_GET:
         context = "receive_path";
         result = receive_path(basename_of(arg), data_sock);
-    } else if (cmd == CMD_PUT) {
+        break;
+    case CMD_PUT:
         context = "send_path";
         result = send_path(data_sock, arg);
-    } else {
+        break;
+    default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
         return EXIT_FAILURE;
     }

@@ -70,8 +70,6 @@ static int send_err(int sock, char const* context, char const* msg)
  *
  *          Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the socket
  *          write was successful.
- *
- *          This prints an error message if sending the response fails.
  */
 
 static int respond(int sock, bool success, char const* context)
@@ -161,8 +159,6 @@ static int init_data(int client_sock)
  *
  *              Exits with `EXIT_SUCCESS` on successful acknowledgement,
  *              or `EXIT_FAILURE` otherwise.
- *
- *              This prints an error message if the acknowledgement fails.
  */
 
 static void server_exit(int client_sock)
@@ -182,32 +178,25 @@ static void server_exit(int client_sock)
  *
  *                   Returns `EXIT_SUCCESS` if command was successful, or
  *                   `EXIT_FAILURE` otherwise.
- *
- *                   This prints an error message if the command fails.
  */
 
 static int handle_local_cmd(int client_sock, int* data_sock,
         enum cmd_type cmd, char const* arg)
 {
-    if (cmd == CMD_EXIT) {
+    switch (cmd) {
+    case CMD_EXIT:
         server_exit(client_sock);
-        return EXIT_FAILURE;
-    } else if (cmd == CMD_RCD) {
+        return EXIT_FAILURE; // unreachable
+    case CMD_RCD:
         return respond(client_sock, cmd_chdir(arg) == EXIT_SUCCESS, "cmd_chdir");
-    } else if (cmd == CMD_DATA) {
+    case CMD_DATA:
         *data_sock = init_data(client_sock);
 
-        if (*data_sock < 0) {
-            char const* msg = "Failed to open data socket";
-            return send_err(client_sock, "init_data", msg);
-        }
-
-        return EXIT_SUCCESS;
-    } else {
-        char const* msg = "Invalid command given";
-        FAIL_IF(send_err(client_sock, "Server", msg) != EXIT_SUCCESS,
-                "send_err", EXIT_FAILURE);
-        return EXIT_SUCCESS;
+        return (*data_sock < 0) ?
+            send_err(client_sock, "init_data", "Failed to create socket") :
+            EXIT_SUCCESS;
+    default:
+        return send_err(client_sock, "Server", "Unrecognized command");
     }
 }
 
@@ -231,23 +220,27 @@ static int handle_data_cmd(int client_sock, int* data_sock,
         return EXIT_SUCCESS;
     }
 
-    log_print("Sending ack through data socket (fd=%d)", *data_sock);
     FAIL_IF(send_ack(*data_sock, NULL) != EXIT_SUCCESS, "send_ack",
             EXIT_FAILURE);
 
     int result;
     char const* context;
 
-    if (cmd == CMD_RLS) {
+    switch (cmd) {
+    case CMD_RLS:
         context = "cmd_ls";
-        result = cmd_ls(*data_sock, NULL);
-    } else if (cmd == CMD_GET || cmd == CMD_SHOW) {
+        result = cmd_ls(*data_sock);
+        break;
+    case CMD_GET:
+    case CMD_SHOW:
         context = "send_path";
         result = send_path(*data_sock, arg);
-    } else if (cmd == CMD_PUT) {
+        break;
+    case CMD_PUT:
         context = "receive_path";
         result = receive_path(basename_of(arg), *data_sock);
-    } else {
+        break;
+    default:
         log_print("Unexpected command %d; check info table for accuracy", cmd);
         return EXIT_FAILURE;
     }
