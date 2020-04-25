@@ -124,15 +124,15 @@ static int listen_on(in_port_t port)
 
 static int init_data(int client_sock)
 {
-    int const data_sock = listen_on(0);
-    Q_FAIL_IF(data_sock < 0, -1);
+    int const tmp_sock = listen_on(0);
+    Q_FAIL_IF(tmp_sock < 0, -1);
 
     struct sockaddr_in addr;
     socklen_t addr_size = sizeof addr;
 
-    if (getsockname(data_sock, (struct sockaddr*) &addr, &addr_size) < 0) {
+    if (getsockname(tmp_sock, (struct sockaddr*) &addr, &addr_size) < 0) {
         int const old_errno = errno;
-        close(data_sock);
+        close(tmp_sock);
         errno = old_errno;
 
         return -1;
@@ -145,7 +145,10 @@ static int init_data(int client_sock)
     log_print("Sent ack over control connection");
 
     char client[CFG_MAXHOST] = {0};
-    Q_FAIL_IF(accept(data_sock, (struct sockaddr*) &addr, &addr_size) < 0, -1);
+    int const data_sock = accept(tmp_sock, (struct sockaddr*) &addr, &addr_size);
+    Q_FAIL_IF(data_sock < 0, -1);
+    close(tmp_sock);
+
     addr_to_hostname((struct sockaddr*) &addr, addr_size, client, sizeof client);
     log_print("Accepted data client at %s:%u", client, ntohs(addr.sin_port));
 
@@ -193,7 +196,13 @@ static int handle_local_cmd(int client_sock, int* data_sock,
         return respond(client_sock, cmd_chdir(arg) == EXIT_SUCCESS, "cmd_chdir");
     } else if (cmd == CMD_DATA) {
         *data_sock = init_data(client_sock);
-        return respond(client_sock, *data_sock >= 0, "init_data");
+
+        if (*data_sock < 0) {
+            char const* msg = "Failed to open data socket";
+            return send_err(client_sock, "init_data", msg);
+        }
+
+        return EXIT_SUCCESS;
     } else {
         char const* msg = "Invalid command given";
         FAIL_IF(send_err(client_sock, "Server", msg) != EXIT_SUCCESS,
@@ -222,6 +231,7 @@ static int handle_data_cmd(int client_sock, int* data_sock,
         return EXIT_SUCCESS;
     }
 
+    log_print("Sending ack through data socket (fd=%d)", *data_sock);
     FAIL_IF(send_ack(*data_sock, NULL) != EXIT_SUCCESS, "send_ack",
             EXIT_FAILURE);
 

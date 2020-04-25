@@ -55,25 +55,6 @@ static struct addrinfo* get_info(char const* host, char const* port)
     return info;
 }
 
-static int connect_to(char const* host, char const* port)
-{
-    struct addrinfo* info = get_info(host, port);
-
-    int const sock = make_socket(info);
-    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
-
-    // copy the required data from the info struct and free it
-    struct sockaddr const dest_addr = *info->ai_addr;
-    socklen_t const dest_addrlen = info->ai_addrlen;
-    freeaddrinfo(info);
-
-    // use the provided info to connect to the given destination
-    Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
-    log_print("Successfully connected to %s:%s", host, port);
-
-    return sock;
-}
-
 static int send_command(int server_sock, enum cmd_type cmd, char const* arg)
 {
     char const code = cmd_get_ctl(cmd);
@@ -97,7 +78,7 @@ static ssize_t get_response(int server_sock, char* rsp, size_t rsp_len)
     if (rsp[0] == '\0') {
         log_print("Received server response: EOF");
     } else {
-        log_print("Received server response: \"%s\" (%zu bytes)", rsp, result);
+        log_print("Received server response: \"%s\" (%zd bytes)", rsp, result);
     }
 
     return result;
@@ -106,6 +87,43 @@ static ssize_t get_response(int server_sock, char* rsp, size_t rsp_len)
 static bool msg_is_eof(char const* msg)
 {
     return msg[0] == '\0';
+}
+
+static int connect_to(char const* host, char const* port)
+{
+    struct addrinfo* info = get_info(host, port);
+
+    int const sock = make_socket(info);
+    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
+
+    // copy the required data from the info struct and free it
+    struct sockaddr const dest_addr = *info->ai_addr;
+    socklen_t const dest_addrlen = info->ai_addrlen;
+    freeaddrinfo(info);
+
+    // use the provided info to connect to the given destination
+    Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
+    log_print("Successfully connected to %s:%s", host, port);
+
+    return sock;
+}
+
+static int init_data(int server_sock, char const* host)
+{
+    FAIL_IF(send_command(server_sock, CMD_DATA, NULL) < 0, "send_command", -1);
+
+    char rsp[CFG_MAXLINE] = {0};
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response", -1);
+
+    if (msg_is_eof(rsp)) {
+        ERRMSG("get_response", "Unexpected EOF received.");
+        return EXIT_FAILURE;
+    }
+
+    FAIL_IF_SERV_ERR(rsp, -1);
+
+    char const* data_port = &rsp[1];
+    return connect_to(host, data_port);
 }
 
 static int handle_local_cmd(enum cmd_type cmd, char const* arg)
@@ -146,24 +164,6 @@ static int handle_remote_cmd(int server_sock, enum cmd_type cmd,
     return EXIT_SUCCESS;
 }
 
-static int init_data(int server_sock, char const* host)
-{
-    FAIL_IF(send_command(server_sock, CMD_DATA, NULL) < 0, "send_command", -1);
-
-    char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response", -1);
-
-    if (msg_is_eof(rsp)) {
-        ERRMSG("get_response", "Unexpected EOF received.");
-        return EXIT_FAILURE;
-    }
-
-    FAIL_IF_SERV_ERR(rsp, -1);
-
-    char const* data_port = &rsp[1];
-    return connect_to(host, data_port);
-}
-
 static int handle_data_cmd(int server_sock, char const* host,
         enum cmd_type cmd, char const* arg)
 {
@@ -186,7 +186,7 @@ static int handle_data_cmd(int server_sock, char const* host,
     char const* context;
     int result;
 
-    if (cmd == CMD_LS || cmd == CMD_SHOW) {
+    if (cmd == CMD_RLS || cmd == CMD_SHOW) {
         context = "send_file";
         result = send_file(STDOUT_FILENO, data_sock);
     } else if (cmd == CMD_GET) {
@@ -229,8 +229,8 @@ static int run_command(int server_sock, char const* host, char const* msg)
 
 static int client_run(char const* hostname)
 {
-    int const sock = connect_to(hostname, AS_STR(CFG_PORT));
-    FAIL_IF(sock < 0, "connect_to", EXIT_FAILURE);
+    int const server_sock = connect_to(hostname, AS_STR(CFG_PORT));
+    FAIL_IF(server_sock < 0, "connect_to", EXIT_FAILURE);
 
     while (true) {
         printf(CFG_PROMPT);
@@ -244,7 +244,7 @@ static int client_run(char const* hostname)
             buf[buf_len - 1] = '\0';
         }
 
-        int const status = run_command(sock, hostname, buf);
+        int const status = run_command(server_sock, hostname, buf);
         log_print("Command status: %d", status);
     }
 }
