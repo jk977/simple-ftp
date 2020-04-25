@@ -29,6 +29,11 @@ struct cmd_info const info_table[] = {
     { .has_arg = false, .is_remote = true,  .needs_data = false, .ctl = 'D' },
 };
 
+/*
+ * cmd_get_ctl: Return the control character for `cmd`, or -1 if the command has
+ *              no control character.
+ */
+
 int cmd_get_ctl(enum cmd_type cmd)
 {
     if (!cmd_is_remote(cmd)) {
@@ -38,30 +43,39 @@ int cmd_get_ctl(enum cmd_type cmd)
     }
 }
 
-enum cmd_type cmd_get_type(char code)
+/*
+ * cmd_get_type: Return the `enum cmd_type` equivalent of the control character,
+ *               or `CMD_INVALID` if `ctl` does not correspond to a command.
+ */
+
+enum cmd_type cmd_get_type(char ctl)
 {
-    if (code == cmd_get_ctl(CMD_EXIT)) {
+    if (ctl == cmd_get_ctl(CMD_EXIT)) {
         return CMD_EXIT;
-    } else if (code == cmd_get_ctl(CMD_CD)) {
+    } else if (ctl == cmd_get_ctl(CMD_CD)) {
         return CMD_CD;
-    } else if (code == cmd_get_ctl(CMD_RCD)) {
+    } else if (ctl == cmd_get_ctl(CMD_RCD)) {
         return CMD_RCD;
-    } else if (code == cmd_get_ctl(CMD_LS)) {
+    } else if (ctl == cmd_get_ctl(CMD_LS)) {
         return CMD_LS;
-    } else if (code == cmd_get_ctl(CMD_RLS)) {
+    } else if (ctl == cmd_get_ctl(CMD_RLS)) {
         return CMD_RLS;
-    } else if (code == cmd_get_ctl(CMD_GET)) {
+    } else if (ctl == cmd_get_ctl(CMD_GET)) {
         return CMD_GET;
-    } else if (code == cmd_get_ctl(CMD_SHOW)) {
+    } else if (ctl == cmd_get_ctl(CMD_SHOW)) {
         return CMD_SHOW;
-    } else if (code == cmd_get_ctl(CMD_PUT)) {
+    } else if (ctl == cmd_get_ctl(CMD_PUT)) {
         return CMD_PUT;
-    } else if (code == cmd_get_ctl(CMD_DATA)) {
+    } else if (ctl == cmd_get_ctl(CMD_DATA)) {
         return CMD_DATA;
     } else {
         return CMD_INVALID;
     }
 }
+
+/*
+ * cmd_is_remote: Return whether or not the command is executed on the server.
+ */
 
 bool cmd_is_remote(enum cmd_type cmd)
 {
@@ -72,6 +86,10 @@ bool cmd_is_remote(enum cmd_type cmd)
     }
 }
 
+/*
+ * cmd_needs_data: Return whether or not the command requires a data connection.
+ */
+
 bool cmd_needs_data(enum cmd_type cmd)
 {
     if (!cmd_is_remote(cmd)) {
@@ -80,6 +98,16 @@ bool cmd_needs_data(enum cmd_type cmd)
         return info_table[cmd].needs_data;
     }
 }
+
+/*
+ * cmd_parse: Parse the user-supplied command in `msg`.
+ *
+ *            Returns a `struct command` containing the command and argument
+ *            provided. If `msg` is an invalid command, the return value will
+ *            contain CMD_INVALID. On success, the `.arg` member of the return
+ *            value will have the same lifetime as `msg`, and should not be
+ *            freed.
+ */
 
 struct command cmd_parse(char const* msg)
 {
@@ -125,11 +153,23 @@ struct command cmd_parse(char const* msg)
     return result;
 }
 
+/*
+ * cmd_exit: Exit the process with `status`. Used instead of calling `exit(3)`
+ *           directly to allow other commands to be added to the exit routine.
+ */
+
 void cmd_exit(int status)
 {
     log_print("Exiting.");
     exit(status);
 }
+
+/*
+ * cmd_chdir: Change directories to `path`.
+ *
+ *            Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on success or failure,
+ *            respectively.
+ */
 
 int cmd_chdir(char const* path)
 {
@@ -137,6 +177,13 @@ int cmd_chdir(char const* path)
     Q_FAIL_IF(chdir(path) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
+
+/*
+ * cmd_ls: Run `ls -l`, sending output to `fd`.
+ *
+ *         Returns -1 if `exec_to_fd()` fails, or the exit status of the `ls`
+ *         command on successful execution.
+ */
 
 int cmd_ls(int fd)
 {
