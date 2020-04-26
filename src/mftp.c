@@ -296,19 +296,24 @@ static int handle_data_cmd(int server_sock, char const* host,
 
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
+
+    if (send_command(server_sock, cmd) != EXIT_SUCCESS) {
+        ERRMSG(strerror(errno));
+        goto fail;
+    }
 
     char rsp[CFG_MAXLINE] = {0};
 
     // wait for server success before executing local command
     if (get_response(server_sock, rsp, sizeof rsp) < 0) {
         ERRMSG(strerror(errno));
-        close(data_sock);
-        return EXIT_FAILURE;
+        goto fail;
+    } else if (msg_is_eof(rsp)) {
+        ERRMSG("Unexpected EOF while waiting for server response");
+        goto fail;
     } else if (rsp[0] == RSP_ERR) {
         print_server_error(rsp);
-        close(data_sock);
-        return EXIT_FAILURE;
+        goto fail;
     }
 
     int result;
@@ -335,6 +340,10 @@ static int handle_data_cmd(int server_sock, char const* host,
 
     close(data_sock);
     return result;
+
+fail:
+    close(data_sock);
+    return EXIT_FAILURE;
 }
 
 /*
