@@ -9,6 +9,16 @@
 static bool enable_debug = false;
 
 /*
+ * log_set_debug: Enable debugging if `status` is true, or disable it if
+ *                `status` is false.
+ */
+
+void log_set_debug(bool status)
+{
+    enable_debug = status;
+}
+
+/*
  * log_print: Logs the given message with `printf(3)` formatting if
  *            logging is enabled. If logging is disabled, this is a no-op.
  */
@@ -31,14 +41,4 @@ void log_print(char const* fmt, ...)
     va_end(ap);
 
     printf("\n");
-}
-
-/*
- * log_set_debug: Enable debugging if `status` is true, or disable it if
- *                `status` is false.
- */
-
-void log_set_debug(bool status)
-{
-    enable_debug = status;
 }

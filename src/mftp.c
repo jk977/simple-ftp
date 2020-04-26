@@ -92,19 +92,19 @@ static bool msg_is_eof(char const* msg)
  *               on failure.
  */
 
-static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
+static ssize_t get_response(int sock, char* rsp, ssize_t rsp_len)
 {
-    ssize_t const result = read_line(sock, rsp, rsp_len);
-    Q_FAIL_IF(result < 0, -1);
+    ssize_t const read_bytes = read_line(sock, rsp, rsp_len);
+    Q_FAIL_IF(read_bytes < 0, -1);
 
     if (msg_is_eof(rsp)) {
         log_print("Received response from fd %d: EOF", sock);
     } else {
         log_print("Received response from fd %d: \"%s\" (%zd bytes)",
-                  sock, rsp, result);
+                  sock, rsp, read_bytes);
     }
 
-    return result;
+    return read_bytes;
 }
 
 /*
@@ -150,10 +150,10 @@ static int init_data(int server_sock, char const* host)
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, -1);
 
     if (msg_is_eof(rsp)) {
-        ERRMSG("Unexpected EOF received");
+        ERRMSG("%s", "Unexpected EOF received");
         return -1;
     } else if (rsp[1] == '\0') {
-        ERRMSG("Expected a port number from server");
+        ERRMSG("%s", "Expected a port number from server");
         return -1;
     }
 
@@ -239,7 +239,7 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, EXIT_FAILURE);
 
     if (msg_is_eof(rsp)) {
-        ERRMSG("Unexpected EOF received.");
+        ERRMSG("%s", "Unexpected EOF received.");
         return EXIT_FAILURE;
     }
 
@@ -270,7 +270,7 @@ static bool validate_data_cmd_arg(struct command cmd)
             // either an error occurred or file isn't readable; either way,
             // just ignore the command
             FAIL_IF(error, false);
-            ERRMSG("Provided path is not a readable regular file");
+            ERRMSG("%s", "Provided path is not a readable regular file");
             return false;
         }
     }
@@ -292,10 +292,10 @@ static bool check_data_response(int server_sock)
     char rsp[CFG_MAXLINE] = {0};
 
     if (get_response(server_sock, rsp, sizeof rsp) < 0) {
-        ERRMSG(strerror(errno));
+        ERRMSG("%s", strerror(errno));
         return false;
     } else if (msg_is_eof(rsp)) {
-        ERRMSG("Unexpected EOF while waiting for server response");
+        ERRMSG("%s", "Unexpected EOF while waiting for server response");
         return false;
     } else if (rsp[0] == RSP_ERR) {
         print_server_error(rsp);
@@ -323,7 +323,7 @@ static int handle_data_cmd(int server_sock, char const* host,
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
 
     if (send_command(server_sock, cmd) != EXIT_SUCCESS) {
-        ERRMSG(strerror(errno));
+        ERRMSG("%s", strerror(errno));
         close(data_sock);
         return EXIT_FAILURE;
     }
@@ -348,12 +348,12 @@ static int handle_data_cmd(int server_sock, char const* host,
         result = send_path(data_sock, cmd.arg);
         break;
     default:
-        fprintf(stderr, "Unexpected command %d; info table error?", cmd.type);
+        ERRMSG("Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
 
     if (result != EXIT_SUCCESS) {
-        ERRMSG(strerror(errno));
+        ERRMSG("%s", strerror(errno));
     }
 
     close(data_sock);
@@ -411,15 +411,15 @@ static int client_run(char const* hostname)
         fflush(stdout);
 
         char buf[CFG_MAXLINE] = {0};
-        FAIL_IF(fgets(buf, sizeof buf, stdin) == NULL, EXIT_FAILURE);
-        size_t const buf_len = strlen(buf);
-
-        if (buf[buf_len - 1] == '\n') {
-            buf[buf_len - 1] = '\0';
-        }
+        ssize_t const read_bytes = read_line(STDIN_FILENO, buf, sizeof buf);
+        FAIL_IF(read_bytes < 0, EXIT_FAILURE);
 
         int const status = run_command(server_sock, hostname, buf);
-        log_print("Command status: %d", status);
+        char const* status_str = (status == EXIT_SUCCESS) ?
+            "successfully" :
+            "unsuccessfully";
+
+        printf("Command finished %s (status = %d)\n", status_str, status);
     }
 }
 

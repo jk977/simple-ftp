@@ -3,7 +3,7 @@
 
 #include <unistd.h>
 
-ssize_t read_line(int fd, char* buf, size_t max_bytes);
+ssize_t read_line(int fd, char* buf, ssize_t buf_len);
 
 int exec_to_fd(int fd, int* status, char* const cmd[]);
 int send_file(int dest_fd, int src_fd);

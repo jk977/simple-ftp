@@ -11,10 +11,15 @@
 #include <netdb.h>
 
 /*
- * ERRMSG: Prints a formatted error with content `msg`.
+ * ERRMSG: Prints a formatted error message with an appended newline.
  */
 
-#define ERRMSG(msg) fprintf(stderr, "Error: %s\n", msg)
+#define ERRMSG(fmt, ...)                    \
+    do {                                    \
+        fprintf(stderr, "Error: ");         \
+        fprintf(stderr, fmt, __VA_ARGS__);  \
+        fprintf(stderr, "\n");              \
+    } while (0)
 
 /*
  * FAIL_IF: Logs error message associated with `errno` and returns `ret` if
@@ -24,12 +29,12 @@
  *          provided by checking for errors.
  */
 
-#define FAIL_IF(cond, ret)              \
-    do {                                \
-        if (cond) {                     \
-            ERRMSG(strerror(errno));    \
-            return ret;                 \
-        }                               \
+#define FAIL_IF(cond, ret)                  \
+    do {                                    \
+        if (cond) {                         \
+            ERRMSG("%s", strerror(errno));  \
+            return ret;                     \
+        }                                   \
     } while (0)
 
 /*
@@ -48,13 +53,13 @@
  *              functions that use `gai_strerror(3)`.
  */
 
-#define GAI_FAIL_IF(code, ret)              \
-    do {                                    \
-        int const _code = code;             \
-        if (_code != 0) {                   \
-            ERRMSG(gai_strerror(_code));    \
-            return ret;                     \
-        }                                   \
+#define GAI_FAIL_IF(code, ret)                  \
+    do {                                        \
+        int const _code = code;                 \
+        if (_code != 0) {                       \
+            ERRMSG("%s", gai_strerror(_code));  \
+            return ret;                         \
+        }                                       \
     } while (0)
 
 #define STR(val)      #val       /* stringify the value passed */

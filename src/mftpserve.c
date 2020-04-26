@@ -171,7 +171,7 @@ static void server_exit(int client_sock)
     int const status = send_ack(client_sock, NULL);
 
     if (status != EXIT_SUCCESS) {
-        ERRMSG(strerror(errno));
+        ERRMSG("%s", strerror(errno));
     }
 
     close(client_sock);
@@ -361,7 +361,7 @@ static int run_server(void)
             if (errno != EINTR) {
                 // ignore `EINTR` since child termination may interrupt
                 // `accept()` with `SIGCHLD`
-                ERRMSG(strerror(errno));
+                ERRMSG("%s", strerror(errno));
             }
 
             continue;

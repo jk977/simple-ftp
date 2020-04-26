@@ -81,6 +81,10 @@ static ssize_t read_until(int fd, char* buf, ssize_t buf_size,
         ++buf;
     }
 
+    if (prev_bytes != 0) {
+        log_print("Warning: EOF not found while reading from fd %d", fd);
+    }
+
     ssize_t const total_bytes = buf_size - remaining - 1;
     log_print("Read %zd bytes from fd %d", total_bytes, fd);
     return total_bytes;
