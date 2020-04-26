@@ -270,22 +270,16 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
     }
 
     int result;
-    int rsp_status;
 
     switch (cmd.type) {
     case CMD_RLS:
         result = cmd_ls(*data_sock);
-        rsp_status = respond(client_sock, result == EXIT_SUCCESS);
-        FAIL_IF(rsp_status != EXIT_SUCCESS, EXIT_FAILURE);
         break;
     case CMD_GET:
     case CMD_SHOW:
         result = send_path(*data_sock, cmd.arg);
-        rsp_status = respond(client_sock, result == EXIT_SUCCESS);
-        FAIL_IF(rsp_status != EXIT_SUCCESS, EXIT_FAILURE);
         break;
     case CMD_PUT:
-        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, EXIT_FAILURE);
         result = receive_path(basename_of(cmd.arg), *data_sock, 0666);
         break;
     default:
@@ -297,6 +291,8 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
     log_print("Closed data connection at fd %d", *data_sock);
     *data_sock = -1;
 
+    int const rsp_status = respond(client_sock, result == EXIT_SUCCESS);
+    FAIL_IF(rsp_status != EXIT_SUCCESS, EXIT_FAILURE);
     return result;
 }
 
