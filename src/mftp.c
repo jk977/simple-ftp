@@ -4,6 +4,7 @@
 #include "logging.h"
 #include "util.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -35,6 +36,8 @@ static char const* program;
 
 static void usage(FILE* stream)
 {
+    assert(stream != NULL);
+
     fprintf(stream, "Usage:\n");
     fprintf(stream, "\t%s -h\n", program);
     fprintf(stream, "\t%s [-d] HOSTNAME\n\n", program);
@@ -50,6 +53,7 @@ static void usage(FILE* stream)
 
 static int print_server_error(char const* msg)
 {
+    assert(msg != NULL);
     return fprintf(stderr, "Server error: %s\n", &msg[1]);
 }
 
@@ -62,6 +66,7 @@ static int print_server_error(char const* msg)
 
 static int send_command(int sock, struct command cmd)
 {
+    assert(cmd.type != CMD_INVALID);
     char const code = cmd_get_ctl(cmd.type);
 
     if (cmd.arg != NULL) {
@@ -81,6 +86,7 @@ static int send_command(int sock, struct command cmd)
 
 static bool msg_is_eof(char const* msg)
 {
+    assert(msg != NULL);
     return msg[0] == '\0';
 }
 
@@ -94,6 +100,10 @@ static bool msg_is_eof(char const* msg)
 
 static ssize_t get_response(int sock, char* rsp, ssize_t rsp_len)
 {
+    assert(sock >= 0);
+    assert(rsp != NULL);
+    assert(rsp_len > 0);
+
     ssize_t const read_bytes = read_line(sock, rsp, rsp_len);
     Q_FAIL_IF(read_bytes < 0, -1);
 
@@ -116,6 +126,9 @@ static ssize_t get_response(int sock, char* rsp, ssize_t rsp_len)
 
 static int connect_to(char const* host, char const* port)
 {
+    assert(host != NULL);
+    assert(port != NULL);
+
     struct addrinfo* info = get_info(host, port);
 
     int const sock = make_socket(info);
@@ -143,6 +156,9 @@ static int connect_to(char const* host, char const* port)
 
 static int init_data(int server_sock, char const* host)
 {
+    assert(server_sock >= 0);
+    assert(host != NULL);
+
     struct command const data_cmd = { .type = CMD_DATA, .arg = NULL };
     FAIL_IF(send_command(server_sock, data_cmd) < 0, -1);
 
@@ -233,6 +249,7 @@ static int handle_local_cmd(struct command cmd)
 
 static int handle_remote_cmd(int server_sock, struct command cmd)
 {
+    assert(server_sock >= 0);
     FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
 
     char rsp[CFG_MAXLINE] = {0};
@@ -252,30 +269,22 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
 }
 
 /*
- * validate_cmd_arg: Make sure the argument in the given command is acceptable.
+ * validate_data_cmd: Make sure the argument in the given command is acceptable.
  *
- *                   Returns `true` if argument is valid, or `false` otherwise.
- *                   If not valid, prints an error message.
+ *                    Returns `true` if argument is valid, or `false` otherwise.
+ *                    If not valid, prints an error message.
  */
 
-static bool validate_data_cmd_arg(struct command cmd)
+static bool validate_data_cmd(struct command cmd)
 {
     if (cmd.type == CMD_PUT) {
         bool error;
-
-        bool const arg_is_readable = is_readable(cmd.arg, &error);
+        bool const arg_is_valid = is_readable_reg(cmd.arg, &error);
         FAIL_IF(error, false);
-
-        if (!arg_is_readable || !is_reg(cmd.arg, &error)) {
-            // either an error occurred or file isn't readable; either way,
-            // just ignore the command
-            FAIL_IF(error, false);
-            ERRMSG("%s", "Provided path is not a readable regular file");
-            return false;
-        }
+        return arg_is_valid;
+    } else {
+        return true;
     }
-
-    return true;
 }
 
 /*
@@ -289,6 +298,7 @@ static bool validate_data_cmd_arg(struct command cmd)
 
 static bool check_data_response(int server_sock)
 {
+    assert(server_sock >= 0);
     char rsp[CFG_MAXLINE] = {0};
 
     if (get_response(server_sock, rsp, sizeof rsp) < 0) {
@@ -317,7 +327,10 @@ static bool check_data_response(int server_sock)
 static int handle_data_cmd(int server_sock, char const* host,
         struct command cmd)
 {
-    Q_FAIL_IF(!validate_data_cmd_arg(cmd), EXIT_FAILURE);
+    assert(server_sock >= 0);
+    assert(host != NULL);
+
+    Q_FAIL_IF(!validate_data_cmd(cmd), EXIT_FAILURE);
 
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
@@ -370,6 +383,10 @@ static int handle_data_cmd(int server_sock, char const* host,
 
 static int run_command(int server_sock, char const* host, char const* msg)
 {
+    assert(server_sock >= 0);
+    assert(host != NULL);
+    assert(msg != NULL);
+
     struct command cmd = cmd_parse(msg);
 
     if (cmd.type == CMD_INVALID) {
@@ -401,9 +418,11 @@ static int run_command(int server_sock, char const* host, char const* msg)
  *             does not return.
  */
 
-static int client_run(char const* hostname)
+static int client_run(char const* host)
 {
-    int const server_sock = connect_to(hostname, AS_STR(CFG_PORT));
+    assert(host != NULL);
+
+    int const server_sock = connect_to(host, AS_STR(CFG_PORT));
     FAIL_IF(server_sock < 0, EXIT_FAILURE);
 
     while (true) {
@@ -419,7 +438,7 @@ static int client_run(char const* hostname)
             continue;
         }
 
-        int const status = run_command(server_sock, hostname, buf);
+        int const status = run_command(server_sock, host, buf);
         char const* status_str = (status == EXIT_SUCCESS) ?
             "successfully" :
             "unsuccessfully";
@@ -454,6 +473,6 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    char const* hostname = argv[optind];
-    return client_run(hostname);
+    char const* host = argv[optind];
+    return client_run(host);
 }

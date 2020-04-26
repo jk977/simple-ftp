@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
@@ -23,6 +24,8 @@ static char const* program;
 
 static void usage(FILE* stream)
 {
+    assert(stream != NULL);
+
     fprintf(stream, "Usage:\n");
     fprintf(stream, "\t%s -h\n", program);
     fprintf(stream, "\t%s [-d]\n\n", program);
@@ -41,6 +44,9 @@ static void usage(FILE* stream)
 
 static int send_ack(int sock, in_port_t const* port)
 {
+    assert(sock >= 0);
+    assert(port != NULL);
+
     if (port != NULL) {
         log_print("Sending ack to %d with port %u", sock, *port);
         Q_FAIL_IF(dprintf(sock, "%c%u\n", RSP_ACK, *port) < 0, EXIT_FAILURE);
@@ -61,6 +67,9 @@ static int send_ack(int sock, in_port_t const* port)
 
 static int send_err(int sock, char const* msg)
 {
+    assert(sock >= 0);
+    assert(msg != NULL);
+
     log_print("Sending error to fd %d: \"%s\"", sock, msg);
     Q_FAIL_IF(dprintf(sock, "%c%s\n", RSP_ERR, msg) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
@@ -78,6 +87,8 @@ static int send_err(int sock, char const* msg)
 
 static int respond(int sock, bool success)
 {
+    assert(sock >= 0);
+
     if (success) {
         FAIL_IF(send_ack(sock, NULL) != EXIT_SUCCESS, EXIT_FAILURE);
     } else {
@@ -125,6 +136,8 @@ static int listen_on(in_port_t port)
 
 static int init_data(int client_sock)
 {
+    assert(client_sock >= 0);
+
     int const tmp_sock = listen_on(0);
     Q_FAIL_IF(tmp_sock < 0, -1);
 
@@ -168,6 +181,7 @@ static int init_data(int client_sock)
 
 static void server_exit(int client_sock)
 {
+    assert(client_sock >= 0);
     int const status = send_ack(client_sock, NULL);
 
     if (status != EXIT_SUCCESS) {
@@ -187,6 +201,9 @@ static void server_exit(int client_sock)
 
 static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
 {
+    assert(client_sock >= 0);
+    assert(data_sock != NULL);
+
     int result;
     char const* err = NULL;
 
@@ -241,6 +258,9 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
 
 static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
 {
+    assert(client_sock >= 0);
+    assert(data_sock != NULL);
+
     if (*data_sock < 0) {
         // fail if data connection has not been created
         char const* err = "Data connection not established";
@@ -286,6 +306,10 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
 
 static int process_command(int client_sock, int* data_sock, char const* msg)
 {
+    assert(client_sock >= 0);
+    assert(data_sock != NULL);
+    assert(msg != NULL);
+
     log_print("Received command from client: %s", msg);
 
     struct command cmd = {
@@ -310,6 +334,8 @@ static int process_command(int client_sock, int* data_sock, char const* msg)
 
 static void handle_connection(int client_sock)
 {
+    assert(client_sock >= 0);
+
     int data_sock = -1;
 
     while (true) {
@@ -331,6 +357,8 @@ static void handle_connection(int client_sock)
 
 static void handle_sigchld(int signum)
 {
+    assert(signum == SIGCHLD);
+
     (void) signum;
     int status;
     pid_t const child = wait(&status);

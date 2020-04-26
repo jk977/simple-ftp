@@ -94,7 +94,7 @@ size_t space_length(char const* str)
  *                    readable.
  */
 
-bool is_readable(char const* path, bool* error)
+static bool is_readable(char const* path, bool* error)
 {
     int const status = access(path, R_OK);
     *error = (status < 0) && (errno != EACCES);
@@ -117,6 +117,18 @@ bool is_reg(char const* path, bool* error)
     }
 
     return S_ISREG(buf.st_mode);
+}
+
+/*
+ * is_readable_reg: Check if `path` is a readable regular file. `*error` is set
+ *                  to `true` if an error occurs, or `false` otherwise.
+ */
+
+bool is_readable_reg(char const* path, bool* error)
+{
+    bool const arg_is_readable = is_readable(path, error);
+    Q_FAIL_IF(*error, false);
+    return arg_is_readable && is_reg(path, error);
 }
 
 /*

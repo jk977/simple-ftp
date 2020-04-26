@@ -77,8 +77,8 @@ size_t word_length(char const* str);
 size_t space_length(char const* str);
 
 char const* basename_of(char const* path);
-bool is_readable(char const* path, bool* error);
 bool is_reg(char const* path, bool* error);
+bool is_readable_reg(char const* path, bool* error);
 
 int make_socket(struct addrinfo const* info);
 int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,
