@@ -12,8 +12,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define ERRMSG(cause, msg) \
-    fprintf(stderr, "%s -> %s: %s\n", __func__, cause, msg)
+#define ERRMSG(msg) fprintf(stderr, "Error: %s\n", msg)
 
 /*
  * FAIL_IF: Logs error message associated with `errno` with context information
@@ -23,12 +22,12 @@
  *          provided by checking for errors.
  */
 
-#define FAIL_IF(cond, cause, ret)           \
-    do {                                    \
-        if (cond) {                         \
-            ERRMSG(cause, strerror(errno)); \
-            return ret;                     \
-        }                                   \
+#define FAIL_IF(cond, ret)              \
+    do {                                \
+        if (cond) {                     \
+            ERRMSG(strerror(errno));    \
+            return ret;                 \
+        }                               \
     } while (0)
 
 /*
@@ -47,13 +46,13 @@
  *              functions that use `gai_strerror(3)`.
  */
 
-#define GAI_FAIL_IF(code, cause, ret)           \
-    do {                                        \
-        int const _code = code;                 \
-        if (_code != 0) {                       \
-            ERRMSG(cause, gai_strerror(_code)); \
-            return ret;                         \
-        }                                       \
+#define GAI_FAIL_IF(code, ret)              \
+    do {                                    \
+        int const _code = code;             \
+        if (_code != 0) {                   \
+            ERRMSG(gai_strerror(_code));    \
+            return ret;                     \
+        }                                   \
     } while (0)
 
 #define STR(val)      #val       /* stringify the value passed */

@@ -78,10 +78,10 @@ static int send_err(int sock, char const* msg)
 static int respond(int sock, bool success)
 {
     if (success) {
-        FAIL_IF(send_ack(sock, NULL) != EXIT_SUCCESS, "send_ack", EXIT_FAILURE);
+        FAIL_IF(send_ack(sock, NULL) != EXIT_SUCCESS, EXIT_FAILURE);
     } else {
         char const* err = strerror(errno);
-        FAIL_IF(send_err(sock, err) != EXIT_SUCCESS, "send_err", EXIT_FAILURE);
+        FAIL_IF(send_err(sock, err) != EXIT_SUCCESS, EXIT_FAILURE);
     }
 
     return EXIT_SUCCESS;
@@ -171,7 +171,7 @@ static void server_exit(int client_sock)
     int const status = send_ack(client_sock, NULL);
 
     if (status != EXIT_SUCCESS) {
-        ERRMSG("send_ack", strerror(errno));
+        ERRMSG(strerror(errno));
     }
 
     close(client_sock);
@@ -222,11 +222,9 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
     }
 
     if (result != EXIT_SUCCESS) {
-        FAIL_IF(send_err(client_sock, err) != EXIT_SUCCESS, "send_err",
-                EXIT_FAILURE);
+        FAIL_IF(send_err(client_sock, err) != EXIT_SUCCESS, EXIT_FAILURE);
     } else {
-        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, "send_ack",
-                EXIT_FAILURE);
+        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, EXIT_FAILURE);
     }
 
     return result;
@@ -247,7 +245,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         // fail if data connection has not been created
         char const* err = "Data connection not established";
         int const status = send_err(client_sock, err);
-        FAIL_IF(status != EXIT_SUCCESS, "send_err", EXIT_FAILURE);
+        FAIL_IF(status != EXIT_SUCCESS, EXIT_FAILURE);
         return EXIT_SUCCESS;
     }
 
@@ -274,7 +272,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
     *data_sock = -1;
 
     int const status = respond(client_sock, result == EXIT_SUCCESS);
-    FAIL_IF(status != EXIT_SUCCESS, "respond", EXIT_FAILURE);
+    FAIL_IF(status != EXIT_SUCCESS, EXIT_FAILURE);
     return result;
 }
 
@@ -346,7 +344,7 @@ static void handle_sigchld(int signum)
 static int run_server(void)
 {
     int const sock = listen_on(CFG_PORT);
-    FAIL_IF(sock < 0, "listen_on", EXIT_FAILURE);
+    FAIL_IF(sock < 0, EXIT_FAILURE);
 
     while (true) {
         struct sockaddr addr;
@@ -357,7 +355,7 @@ static int run_server(void)
             if (errno != EINTR) {
                 // ignore `EINTR` since child termination may interrupt
                 // `accept()` with `SIGCHLD`
-                ERRMSG("accept", strerror(errno));
+                ERRMSG(strerror(errno));
             }
 
             continue;
@@ -365,12 +363,12 @@ static int run_server(void)
 
         char host[CFG_MAXHOST] = {0};
         GAI_FAIL_IF(addr_to_hostname(&addr, addr_len, host, sizeof host),
-                    "addr_to_hostname", EXIT_FAILURE);
+                    EXIT_FAILURE);
         printf("Accepted connection from %s\n", host);
 
         // fork to have the child handle client so the parent can keep listening
         pid_t const child = fork();
-        FAIL_IF(child < 0, "fork", EXIT_FAILURE);
+        FAIL_IF(child < 0, EXIT_FAILURE);
 
         if (child == 0) {
             handle_connection(client_sock);
@@ -391,8 +389,8 @@ int main(int argc, char** argv)
     };
 
     // register signal to clean up children when they finish
-    FAIL_IF(sigemptyset(&act.sa_mask) < 0, "sigemptyset", EXIT_FAILURE);
-    FAIL_IF(sigaction(SIGCHLD, &act, NULL) < 0, "sigaction", EXIT_FAILURE);
+    FAIL_IF(sigemptyset(&act.sa_mask) < 0, EXIT_FAILURE);
+    FAIL_IF(sigaction(SIGCHLD, &act, NULL) < 0, EXIT_FAILURE);
 
     int opt;
 

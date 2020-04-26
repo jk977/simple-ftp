@@ -130,7 +130,7 @@ static int connect_to(char const* host, char const* port)
 
     // use the provided info to connect to the given destination
     Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
-    log_print("Successfully connected to %s:%s (fd=%d)", host, port, sock);
+    log_print("Successfully connected to %s:%s (fd %d)", host, port, sock);
 
     return sock;
 }
@@ -146,16 +146,16 @@ static int connect_to(char const* host, char const* port)
 static int init_data(int server_sock, char const* host)
 {
     struct command const data_cmd = { .type = CMD_DATA, .arg = NULL };
-    FAIL_IF(send_command(server_sock, data_cmd) < 0, "send_command", -1);
+    FAIL_IF(send_command(server_sock, data_cmd) < 0, -1);
 
     char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response", -1);
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, -1);
 
     if (msg_is_eof(rsp)) {
-        ERRMSG("get_response", "Unexpected EOF received.");
+        ERRMSG("Unexpected EOF received.");
         return -1;
     } else if (rsp[1] == '\0') {
-        ERRMSG("get_response", "Expected a port number");
+        ERRMSG("Expected a port number");
         return -1;
     }
 
@@ -207,23 +207,20 @@ static int local_ls(void)
 static int handle_local_cmd(struct command cmd)
 {
     int result;
-    char const* context;
 
     switch (cmd.type) {
     case CMD_LS:
         result = local_ls();
-        context = "local_ls";
         break;
     case CMD_CD:
         result = cmd_chdir(cmd.arg);
-        context = "cmd_chdir";
         break;
     default:
-        log_print("Unexpected command %d; info table error?", cmd.type);
+        fprintf(stderr, "Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
 
-    FAIL_IF(result != EXIT_SUCCESS, context, EXIT_FAILURE);
+    FAIL_IF(result != EXIT_SUCCESS, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
@@ -237,15 +234,13 @@ static int handle_local_cmd(struct command cmd)
 
 static int handle_remote_cmd(int server_sock, struct command cmd)
 {
-    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, "send_command",
-            EXIT_FAILURE);
+    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
 
     char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response",
-            EXIT_FAILURE);
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, EXIT_FAILURE);
 
     if (msg_is_eof(rsp)) {
-        ERRMSG("get_response", "Unexpected EOF received.");
+        ERRMSG("Unexpected EOF received.");
         return EXIT_FAILURE;
     }
 
@@ -270,24 +265,19 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
 {
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, "send_command",
-            EXIT_FAILURE);
+    FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
 
-    char const* context;
     int result;
 
     switch (cmd.type) {
     case CMD_RLS:
     case CMD_SHOW:
-        context = "page_fd";
         result = page_fd(data_sock);
         break;
     case CMD_GET:
-        context = "receive_path";
         result = receive_path(basename_of(cmd.arg), data_sock, 0666);
         break;
     case CMD_PUT:
-        context = "send_path";
         result = send_path(data_sock, cmd.arg);
         break;
     default:
@@ -296,14 +286,13 @@ static int handle_data_cmd(int server_sock, char const* host, struct command cmd
     }
 
     if (result != EXIT_SUCCESS) {
-        ERRMSG(context, strerror(errno));
+        ERRMSG(strerror(errno));
     }
 
     close(data_sock);
 
     char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, "get_response",
-            EXIT_FAILURE);
+    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, EXIT_FAILURE);
     FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
 
     return result;
@@ -345,14 +334,14 @@ static int run_command(int server_sock, char const* host, char const* msg)
 static int client_run(char const* hostname)
 {
     int const server_sock = connect_to(hostname, AS_STR(CFG_PORT));
-    FAIL_IF(server_sock < 0, "connect_to", EXIT_FAILURE);
+    FAIL_IF(server_sock < 0, EXIT_FAILURE);
 
     while (true) {
         printf(CFG_PROMPT);
         fflush(stdout);
 
         char buf[CFG_MAXLINE] = {0};
-        FAIL_IF(fgets(buf, sizeof(buf), stdin) == NULL, "fgets", EXIT_FAILURE);
+        FAIL_IF(fgets(buf, sizeof(buf), stdin) == NULL, EXIT_FAILURE);
         size_t const buf_len = strlen(buf);
 
         if (buf[buf_len - 1] == '\n') {
