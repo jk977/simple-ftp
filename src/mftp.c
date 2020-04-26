@@ -198,10 +198,11 @@ static int local_ls(void)
 }
 
 /*
- * handle_local_cmd: Execute `cmd` locally, printing an error message on failure.
+ * handle_local_cmd: Execute `cmd` locally, printing an error message on
+ *                   failure.
  *
- *                   Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
- *                   respectively.
+ *                   Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or
+ *                   failure, respectively.
  */
 
 static int handle_local_cmd(struct command cmd)
@@ -228,8 +229,8 @@ static int handle_local_cmd(struct command cmd)
  * handle_remote_cmd: Send `cmd` to `server_sock` to be executed, printing an
  *                    error message on failure.
  *
- *                    Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
- *                    respectively.
+ *                    Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or
+ *                    failure, respectively.
  */
 
 static int handle_remote_cmd(int server_sock, struct command cmd)
@@ -253,15 +254,16 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
 }
 
 /*
- * handle_data_cmd: Establish a data connection with the server and execute `cmd`
- *                  both locally and remotely, printing an error message on
- *                  failure.
+ * handle_data_cmd: Establish a data connection with the server and execute
+ *                  `cmd` both locally and remotely, printing an error message
+ *                  on failure.
  *
- *                  Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
- *                  respectively.
+ *                  Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or
+ *                  failure, respectively.
  */
 
-static int handle_data_cmd(int server_sock, char const* host, struct command cmd)
+static int handle_data_cmd(int server_sock, char const* host,
+        struct command cmd)
 {
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
