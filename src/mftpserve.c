@@ -96,7 +96,7 @@ static int respond(int sock, bool success)
 static int listen_on(in_port_t port)
 {
     int const sock = make_socket(NULL);
-    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
+    Q_FAIL_IF(sock < 0, -1);
 
     struct in_addr const sin_addr = { .s_addr = INADDR_ANY };
     struct sockaddr_in address = {
@@ -106,9 +106,8 @@ static int listen_on(in_port_t port)
     };
 
     // set up server to start listening for connections (any address)
-    Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof address) < 0,
-              EXIT_FAILURE);
-    Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0, EXIT_FAILURE);
+    Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof address) < 0, -1);
+    Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0, -1);
     log_print("Created socket %d listening on port %u", sock, port);
 
     return sock;
@@ -351,6 +350,8 @@ static int run_server(void)
     FAIL_IF(sock < 0, EXIT_FAILURE);
 
     while (true) {
+        log_print("Waiting for client with socket at fd %d", sock);
+
         struct sockaddr addr;
         socklen_t addr_len = sizeof(struct sockaddr_in);
         int const client_sock = accept(sock, &addr, &addr_len);
