@@ -1,6 +1,7 @@
 #ifndef UTIL_H_
 #define UTIL_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -15,8 +16,8 @@
 #define ERRMSG(msg) fprintf(stderr, "Error: %s\n", msg)
 
 /*
- * FAIL_IF: Logs error message associated with `errno` with context information
- *          and returns `ret` if `cond` is truthy.
+ * FAIL_IF: Logs error message associated with `errno` and returns `ret` if
+ *          `cond` is truthy.
  *
  *          This greatly reduces boilerplate code without sacrificing the safety
  *          provided by checking for errors.
@@ -62,12 +63,15 @@ size_t word_length(char const* str);
 size_t space_length(char const* str);
 size_t line_length(char const* str);
 
+char const* basename_of(char const* path);
+bool is_readable(char const* path, bool* error);
+bool is_reg(char const* path, bool* error);
+
 ssize_t write_str(int fd, char const* str);
 ssize_t read_line(int fd, char* buf, size_t max_bytes);
 
 int exec_to_fd(int fd, int* status, char* const cmd[]);
 
-char const* basename_of(char const* path);
 int send_file(int dest_fd, int src_fd);
 int page_fd(int fd);
 

@@ -88,6 +88,75 @@ size_t line_length(char const* str)
 }
 
 /*
+ * is_readable: Returns true if file is readable by the user, otherwise false.
+ *              On failure, error and errno are set accordingly.
+ *
+ *              Note: access() returns -1 and sets errno to EACCES if the file
+ *                    isn't readable. This function doesn't consider an
+ *                    unreadable file to be an error, so a special check is done
+ *                    to see if errno is EACCES in addition to checking if
+ *                    access() returns 0.
+ *
+ *                    This function also is not concerned with whether or not
+ *                    the file exists. It only checks if the file exists and is
+ *                    readable.
+ */
+
+bool is_readable(char const* path, bool* error)
+{
+    int const status = access(path, R_OK);
+    *error = (status < 0) && (errno != EACCES);
+    return status == 0;
+}
+
+/*
+ * is_reg: Check if `path` is a regular file. `*error` is set to `true` if
+ *         an error occurs, or `false` otherwise.
+ */
+
+bool is_reg(char const* path, bool* error)
+{
+    struct stat buf;
+    *error = false;
+
+    if (lstat(path, &buf) < 0) {
+        *error = true;
+        return false;
+    }
+
+    return S_ISREG(buf.st_mode);
+}
+
+/*
+ * basename_of: Wrapper for `basename(3)` that doesn't mutate its argument
+ *              regardless of the usage of GNU C.
+ *
+ *              Returns a pointer to the base of the path, contained within
+ *              the string `path`. Thus, if `path` goes out of scope or is
+ *              freed by the caller, the return value is invalidated.
+ */
+
+char const* basename_of(char const* path)
+{
+    size_t const path_len = strlen(path);
+    char path_copy[path_len + 1];
+    strcpy(path_copy, path);
+
+    char const* base = basename(path_copy);
+
+    if (strcmp(path_copy, base) == 0) {
+        // `path` doesn't contain any slashes
+        return path;
+    }
+
+    size_t const base_len = strlen(base);
+    size_t const path_offset = path_len - base_len;
+
+    char const* path_base = path + path_offset;
+    return path_base;
+}
+
+/*
  * write_str: Write `str` to `fd`, stopping on failure. `str` must be at most
  *            `SSIZE_MAX` bytes long, excluding the null-terminating byte.
  *
@@ -260,53 +329,6 @@ int page_fd(int fd)
 }
 
 /*
- * basename_of: Wrapper for `basename(3)` that doesn't mutate its argument
- *              regardless of the usage of GNU C.
- *
- *              Returns a pointer to the base of the path, contained within
- *              the string `path`. Thus, if `path` goes out of scope or is
- *              freed by the caller, the return value is invalidated.
- */
-
-char const* basename_of(char const* path)
-{
-    size_t const path_len = strlen(path);
-    char path_copy[path_len + 1];
-    strcpy(path_copy, path);
-
-    char const* base = basename(path_copy);
-
-    if (strcmp(path_copy, base) == 0) {
-        // `path` doesn't contain any slashes
-        return path;
-    }
-
-    size_t const base_len = strlen(base);
-    size_t const path_offset = path_len - base_len;
-
-    char const* path_base = path + path_offset;
-    return path_base;
-}
-
-/*
- * file_is_reg: Check if `path` is a regular file. `*error` is set to `true` if
- *              an error occurs, or `false` otherwise.
- */
-
-static bool file_is_reg(char const* path, bool* error)
-{
-    struct stat buf;
-    *error = false;
-
-    if (lstat(path, &buf) < 0) {
-        *error = true;
-        return false;
-    }
-
-    return S_ISREG(buf.st_mode);
-}
-
-/*
  * send_path: Put the contents of the file at `src_path` into the file
  *            descriptor `dest_fd`.
  *
@@ -321,7 +343,7 @@ static bool file_is_reg(char const* path, bool* error)
 int send_path(int dest_fd, char const* src_path)
 {
     bool error;
-    bool path_is_reg = file_is_reg(src_path, &error);
+    bool path_is_reg = is_reg(src_path, &error);
     Q_FAIL_IF(error, EXIT_FAILURE);
 
     if (!path_is_reg) {
@@ -395,7 +417,7 @@ int make_socket(struct addrinfo const* p_info)
     Q_FAIL_IF(sock < 0, -1);
 
     int const opt_val = 1;
-    size_t const opt_size = sizeof(opt_val);
+    size_t const opt_size = sizeof opt_val;
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt_val, opt_size) < 0) {
         // prevent `close()` from changing `errno`

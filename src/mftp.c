@@ -152,10 +152,10 @@ static int init_data(int server_sock, char const* host)
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, -1);
 
     if (msg_is_eof(rsp)) {
-        ERRMSG("Unexpected EOF received.");
+        ERRMSG("Unexpected EOF received");
         return -1;
     } else if (rsp[1] == '\0') {
-        ERRMSG("Expected a port number");
+        ERRMSG("Expected a port number from server");
         return -1;
     }
 
@@ -254,6 +254,33 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
 }
 
 /*
+ * validate_cmd_arg: Make sure the argument in the given command is acceptable.
+ *
+ *                   Returns `true` if argument is valid, or `false` otherwise.
+ *                   If not valid, prints an error message.
+ */
+
+static bool validate_data_cmd_arg(struct command cmd)
+{
+    if (cmd.type == CMD_PUT) {
+        bool error;
+
+        bool const arg_is_readable = is_readable(cmd.arg, &error);
+        FAIL_IF(error, false);
+
+        if (!arg_is_readable || !is_reg(cmd.arg, &error)) {
+            // either an eror occurred or file isn't readable; either way,
+            // just ignore the command
+            FAIL_IF(error, false);
+            ERRMSG("Provided path is not a readable regular file");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
  * handle_data_cmd: Establish a data connection with the server and execute
  *                  `cmd` both locally and remotely, printing an error message
  *                  on failure.
@@ -265,9 +292,24 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
 static int handle_data_cmd(int server_sock, char const* host,
         struct command cmd)
 {
+    Q_FAIL_IF(!validate_data_cmd_arg(cmd), EXIT_FAILURE);
+
     int const data_sock = init_data(server_sock, host);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
     FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
+
+    char rsp[CFG_MAXLINE] = {0};
+
+    // wait for server success before executing local command
+    if (get_response(server_sock, rsp, sizeof rsp) < 0) {
+        ERRMSG(strerror(errno));
+        close(data_sock);
+        return EXIT_FAILURE;
+    } else if (rsp[0] == RSP_ERR) {
+        print_server_error(rsp);
+        close(data_sock);
+        return EXIT_FAILURE;
+    }
 
     int result;
 
@@ -292,11 +334,6 @@ static int handle_data_cmd(int server_sock, char const* host,
     }
 
     close(data_sock);
-
-    char rsp[CFG_MAXLINE] = {0};
-    FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, EXIT_FAILURE);
-    FAIL_IF_SERV_ERR(rsp, EXIT_FAILURE);
-
     return result;
 }
 
