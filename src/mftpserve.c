@@ -41,10 +41,10 @@ static void usage(FILE* stream)
 static int send_ack(int sock, in_port_t const* port)
 {
     if (port != NULL) {
-        log_print("Sending ack with port %u", *port);
+        log_print("Sending ack to %d with port %u", sock, *port);
         Q_FAIL_IF(dprintf(sock, "%c%u\n", RSP_ACK, *port) < 0, EXIT_FAILURE);
     } else {
-        log_print("Sending ack");
+        log_print("Sending ack to %d", sock);
         Q_FAIL_IF(dprintf(sock, "%c\n", RSP_ACK) < 0, EXIT_FAILURE);
     }
 
@@ -52,37 +52,36 @@ static int send_ack(int sock, in_port_t const* port)
 }
 
 /*
- * send_err: Send an error message to the given socket, in the format
- *           "context: msg".
+ * send_err: Send an error message to the given socket.
  *
  *           Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the
  *           socket write was successful.
  */
 
-static int send_err(int sock, char const* context, char const* msg)
+static int send_err(int sock, char const* msg)
 {
-    log_print("Sending error (context=\"%s\", msg=\"%s\")", context, msg);
-    Q_FAIL_IF(dprintf(sock, "%c%s: %s\n", RSP_ERR, context, msg) < 0,
-              EXIT_FAILURE);
+    log_print("Sending error to fd %d: \"%s\"", sock, msg);
+    Q_FAIL_IF(dprintf(sock, "%c%s\n", RSP_ERR, msg) < 0, EXIT_FAILURE);
     return EXIT_SUCCESS;
 }
 
 /*
  * respond: Send a response to the given socket. If `success` is true, the
  *          response is an acknowledgement. Otherwise, the response is an error
- *          with the contents "context: strerror(errno)".
+ *          message containing the string associated with the current value of
+ *          `errno`.
  *
  *          Returns `EXIT_SUCCESS` or `EXIT_FAILURE`, depending on if the socket
  *          write was successful.
  */
 
-static int respond(int sock, bool success, char const* context)
+static int respond(int sock, bool success)
 {
     if (success) {
         FAIL_IF(send_ack(sock, NULL) != EXIT_SUCCESS, "send_ack", EXIT_FAILURE);
     } else {
-        FAIL_IF(send_err(sock, context, strerror(errno)) != EXIT_SUCCESS,
-                "send_err", EXIT_FAILURE);
+        char const* err = strerror(errno);
+        FAIL_IF(send_err(sock, err) != EXIT_SUCCESS, "send_err", EXIT_FAILURE);
     }
 
     return EXIT_SUCCESS;
@@ -110,7 +109,7 @@ static int listen_on(in_port_t port)
     Q_FAIL_IF(bind(sock, (struct sockaddr*) &address, sizeof address) < 0,
               EXIT_FAILURE);
     Q_FAIL_IF(listen(sock, CFG_BACKLOG) < 0, EXIT_FAILURE);
-    log_print("Listening on port %u", port);
+    log_print("Created socket %d listening on port %u", sock, port);
 
     return sock;
 }
@@ -141,10 +140,11 @@ static int init_data(int client_sock)
     }
 
     in_port_t const port = ntohs(addr.sin_port);
-    log_print("Created data connection; listening on port %u", port);
+    log_print("Created data connection at fd %d; listening on port %u",
+              tmp_sock, port);
 
     Q_FAIL_IF(send_ack(client_sock, &port) != EXIT_SUCCESS, -1);
-    log_print("Sent ack over control connection");
+    log_print("Sent ack over control connection at fd %d", client_sock);
 
     char client[CFG_MAXHOST] = {0};
     int const data_sock = accept(tmp_sock, (struct sockaddr*) &addr, &addr_size);
@@ -152,7 +152,7 @@ static int init_data(int client_sock)
     close(tmp_sock);
 
     addr_to_hostname((struct sockaddr*) &addr, addr_size, client, sizeof client);
-    log_print("Accepted data client at %s:%u (fd=%d)",
+    log_print("Accepted data client at %s:%u (fd %d)",
               client, ntohs(addr.sin_port), data_sock);
 
     return data_sock;
@@ -168,7 +168,7 @@ static int init_data(int client_sock)
 
 static void server_exit(int client_sock)
 {
-    int status = send_ack(client_sock, NULL);
+    int const status = send_ack(client_sock, NULL);
 
     if (status != EXIT_SUCCESS) {
         ERRMSG("send_ack", strerror(errno));
@@ -187,22 +187,49 @@ static void server_exit(int client_sock)
 
 static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
 {
+    int result;
+    char const* err = NULL;
+
     switch (cmd.type) {
     case CMD_EXIT:
         server_exit(client_sock);
-        return EXIT_FAILURE; // unreachable
-    case CMD_RCD:
-        return respond(client_sock, cmd_chdir(cmd.arg) == EXIT_SUCCESS,
-                       "cmd_chdir");
+
+        // this line should never be reached
+        result = EXIT_FAILURE;
+        err = "Failed to exit process";
+        break;
     case CMD_DATA:
         *data_sock = init_data(client_sock);
 
-        return (*data_sock < 0) ?
-            send_err(client_sock, "init_data", "Failed to create socket") :
-            EXIT_SUCCESS;
+        if (*data_sock >= 0) {
+            // return early to avoid sending multiple acks; although it's a
+            // little hack-ish, this is due to the protocol sending the port
+            // alongside the ack, requiring special handling of the ack
+            return EXIT_SUCCESS;
+        }
+
+        result = EXIT_FAILURE;
+        err = "Failed to create data socket";
+        break;
+    case CMD_RCD:
+        result = cmd_chdir(cmd.arg);
+        err = strerror(errno);
+        break;
     default:
-        return send_err(client_sock, "Server", "Unrecognized command");
+        result = EXIT_FAILURE;
+        err = "Unrecognized command";
+        break;
     }
+
+    if (result != EXIT_SUCCESS) {
+        FAIL_IF(send_err(client_sock, err) != EXIT_SUCCESS, "send_err",
+                EXIT_FAILURE);
+    } else {
+        FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, "send_ack",
+                EXIT_FAILURE);
+    }
+
+    return result;
 }
 
 /*
@@ -216,29 +243,25 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
 
 static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
 {
-    // make sure data connection has been created
     if (*data_sock < 0) {
-        char const* msg = "Data connection not established.";
-        FAIL_IF(send_err(client_sock, "Server", msg) != EXIT_SUCCESS,
-                "send_err", EXIT_FAILURE);
+        // fail if data connection has not been created
+        char const* err = "Data connection not established";
+        int const status = send_err(client_sock, err);
+        FAIL_IF(status != EXIT_SUCCESS, "send_err", EXIT_FAILURE);
         return EXIT_SUCCESS;
     }
 
     int result;
-    char const* context;
 
     switch (cmd.type) {
     case CMD_RLS:
-        context = "cmd_ls";
         result = cmd_ls(*data_sock);
         break;
     case CMD_GET:
     case CMD_SHOW:
-        context = "send_path";
         result = send_path(*data_sock, cmd.arg);
         break;
     case CMD_PUT:
-        context = "receive_path";
         result = receive_path(basename_of(cmd.arg), *data_sock, 0666);
         break;
     default:
@@ -246,17 +269,12 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         return EXIT_FAILURE;
     }
 
-    if (result != EXIT_SUCCESS) {
-        ERRMSG(context, strerror(errno));
-    }
-
     close(*data_sock);
     log_print("Closed data connection at fd %d", *data_sock);
     *data_sock = -1;
 
-    Q_FAIL_IF(send_ack(client_sock, NULL) != EXIT_SUCCESS, -1);
-    log_print("Sent ack over control connection");
-
+    int const status = respond(client_sock, result == EXIT_SUCCESS);
+    FAIL_IF(status != EXIT_SUCCESS, "respond", EXIT_FAILURE);
     return result;
 }
 
@@ -272,6 +290,10 @@ static int process_command(int client_sock, int* data_sock, char const* msg)
         .type = cmd_get_type(msg[0]),
         .arg = &msg[1],
     };
+
+    if (cmd.type == CMD_INVALID) {
+        return send_err(client_sock, "Unrecognized command");
+    }
 
     if (!cmd_needs_data(cmd.type)) {
         return handle_local_cmd(client_sock, data_sock, cmd);
@@ -295,7 +317,7 @@ static void handle_connection(int client_sock)
             process_command(client_sock, &data_sock, message);
         } else {
             log_print("Failed to receive message from client");
-            send_err(client_sock, "read_line", strerror(errno));
+            send_err(client_sock, strerror(errno));
         }
     }
 }
