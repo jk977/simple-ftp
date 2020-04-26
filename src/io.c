@@ -57,9 +57,14 @@ static ssize_t write_buf(int fd, void const* buf, ssize_t buf_size)
  *             with `errno` set.
  */
 
-static ssize_t read_until(int fd, char* buf, size_t buf_size,
+static ssize_t read_until(int fd, char* buf, ssize_t buf_size,
         int (*char_is_end)(int))
 {
+    if (buf_size < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
     size_t remaining = buf_size - 1;
     ssize_t prev_bytes;
 
@@ -89,7 +94,7 @@ static ssize_t read_until(int fd, char* buf, size_t buf_size,
  *           Returns the total number of bytes read.
  */
 
-static ssize_t read_all(int fd, char* buf, size_t buf_size)
+static ssize_t read_all(int fd, char* buf, ssize_t buf_size)
 {
     return read_until(fd, buf, buf_size, NULL);
 }
@@ -103,7 +108,7 @@ static ssize_t read_all(int fd, char* buf, size_t buf_size)
  *            Returns the total number of bytes read.
  */
 
-ssize_t read_line(int fd, char* buf, size_t buf_size)
+ssize_t read_line(int fd, char* buf, ssize_t buf_size)
 {
     return read_until(fd, buf, buf_size, is_newline);
 }
@@ -148,8 +153,8 @@ int send_file(int dest_fd, int src_fd)
 {
     log_print("Sending fd %d contents to fd %d", src_fd, dest_fd);
 
-    char buf[BUFSIZ] = {0};
     ssize_t prev_bytes;
+    char buf[BUFSIZ] = {0};
 
     while ((prev_bytes = read_all(src_fd, buf, sizeof(buf) - 1)) != 0) {
         Q_FAIL_IF(prev_bytes < 0, EXIT_FAILURE);
