@@ -13,27 +13,34 @@
 #include <sys/wait.h>
 
 /*
- * write_str: Write `str` to `fd`, stopping on failure. `str` must be at most
- *            `SSIZE_MAX` bytes long, excluding the null-terminating byte.
+ * write_buf: Write `buf_size` bytes of `buf` to `fd`, stopping on failure.
  *
  *            Returns the total number of bytes written, or -1 on failure with
  *            `errno` set.
+ *
+ *            Note that `buf_size` is signed rather than unsigned to ensure the
+ *            return value can fit the total size of the buffer. If `buf_size`
+ *            is negative, -1 will be returned with `errno` will be set to
+ *            `EINVAL`.
  */
 
-ssize_t write_str(int fd, char const* str)
+static ssize_t write_buf(int fd, void const* buf, ssize_t buf_size)
 {
-    size_t remaining = strlen(str);
+    if (buf_size < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    size_t remaining = buf_size;
     ssize_t total_bytes = 0;
     ssize_t prev_bytes;
 
-    while (remaining > 0 && (prev_bytes = write(fd, str, remaining)) != 0) {
-        if (prev_bytes < 0) {
-            return -1;
-        }
+    while (remaining > 0 && (prev_bytes = write(fd, buf, remaining)) != 0) {
+        Q_FAIL_IF(prev_bytes < 0, -1);
 
         remaining -= prev_bytes;
         total_bytes += prev_bytes;
-        str += prev_bytes;
+        buf = (char const*) buf + prev_bytes;
     }
 
     log_print("Wrote %zd bytes to fd %d", total_bytes, fd);
@@ -142,11 +149,15 @@ int send_file(int dest_fd, int src_fd)
     log_print("Sending fd %d contents to fd %d", src_fd, dest_fd);
 
     char buf[BUFSIZ] = {0};
-    size_t prev_bytes;
+    ssize_t prev_bytes;
 
-    while ((prev_bytes = read_all(src_fd, buf, BUFSIZ - 1)) > 0) {
-        size_t const written_bytes = write_str(dest_fd, buf);
+    while ((prev_bytes = read_all(src_fd, buf, sizeof(buf) - 1)) != 0) {
+        Q_FAIL_IF(prev_bytes < 0, EXIT_FAILURE);
+
+        ssize_t const written_bytes = write_buf(dest_fd, buf, prev_bytes);
+        Q_FAIL_IF(written_bytes < 0, EXIT_FAILURE);
         Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
+
         memset(buf, '\0', BUFSIZ);
     }
 
@@ -252,4 +263,3 @@ int receive_path(char const* dest_path, int src_fd, unsigned int mode)
     close(dest_fd);
     return result;
 }
-
