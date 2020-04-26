@@ -96,7 +96,7 @@ static bool msg_is_eof(char const* msg)
 
 static ssize_t get_response(int sock, char* rsp, size_t rsp_len)
 {
-    ssize_t const result = read_line(sock, rsp, rsp_len - 1);
+    ssize_t const result = read_line(sock, rsp, rsp_len);
     Q_FAIL_IF(result < 0, -1);
 
     if (msg_is_eof(rsp)) {
@@ -269,7 +269,7 @@ static bool validate_data_cmd_arg(struct command cmd)
         FAIL_IF(error, false);
 
         if (!arg_is_readable || !is_reg(cmd.arg, &error)) {
-            // either an eror occurred or file isn't readable; either way,
+            // either an error occurred or file isn't readable; either way,
             // just ignore the command
             FAIL_IF(error, false);
             ERRMSG("Provided path is not a readable regular file");
@@ -380,7 +380,7 @@ static int client_run(char const* hostname)
         fflush(stdout);
 
         char buf[CFG_MAXLINE] = {0};
-        FAIL_IF(fgets(buf, sizeof(buf), stdin) == NULL, EXIT_FAILURE);
+        FAIL_IF(fgets(buf, sizeof buf, stdin) == NULL, EXIT_FAILURE);
         size_t const buf_len = strlen(buf);
 
         if (buf[buf_len - 1] == '\n') {

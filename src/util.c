@@ -184,18 +184,18 @@ ssize_t write_str(int fd, char const* str)
 
 /*
  * read_until: Read from `fd` until either an EOF is reached, a byte is read
- *             that returns nonzero from `char_is_end()`, `max_bytes` have been
- *             read, or an error occurs. `str` must be at most `SSIZE_MAX` bytes
- *             long, excluding the null-terminating byte.
+ *             that returns nonzero from `char_is_end()`, `buf_size - 1` bytes
+ *             have been read, or an error occurs. `str` must be at most
+ *             `SSIZE_MAX` bytes long, excluding the null-terminating byte.
  *
  *             Returns the number of bytes read on success, or -1 on failure
  *             with `errno` set.
  */
 
-static ssize_t read_until(int fd, char* buf, size_t max_bytes,
+static ssize_t read_until(int fd, char* buf, size_t buf_size,
         int (*char_is_end)(int))
 {
-    size_t remaining = max_bytes;
+    size_t remaining = buf_size - 1;
     ssize_t prev_bytes;
 
     // read bytes one at a time to check for end
@@ -211,34 +211,34 @@ static ssize_t read_until(int fd, char* buf, size_t max_bytes,
         ++buf;
     }
 
-    return max_bytes - remaining;
+    return buf_size - remaining - 1;
 }
 
 /*
- * read_all: Read at most `max_bytes` from `fd` into `buf`, stopping when
- *           either no bytes are read, `max_bytes` have been read, or an error
- *           occurs. Wraps `read_until()`.
+ * read_all: Read at most `buf_size - 1` bytes from `fd` into `buf`, stopping
+ *           when either no bytes are read, `max_bytes` have been read, or an
+ *           error occurs. Wraps `read_until()`.
  *
  *           Returns the total number of bytes read.
  */
 
-static ssize_t read_all(int fd, char* buf, size_t max_bytes)
+static ssize_t read_all(int fd, char* buf, size_t buf_size)
 {
-    return read_until(fd, buf, max_bytes, NULL);
+    return read_until(fd, buf, buf_size, NULL);
 }
 
 /*
- * read_line: Read at most `max_bytes` from `fd` into `buf`, stopping when
- *            either no bytes are read, `max_bytes` have been read, a newline
- *            character is encountered, or an error occurs. Wraps
+ * read_line: Read at most `buf_size - 1` bytes from `fd` into `buf`, stopping
+ *            when either no bytes are read, `max_bytes` have been read, a
+ *            newline character is encountered, or an error occurs. Wraps
  *            `read_until()`.
  *
  *            Returns the total number of bytes read.
  */
 
-ssize_t read_line(int fd, char* buf, size_t max_bytes)
+ssize_t read_line(int fd, char* buf, size_t buf_size)
 {
-    return read_until(fd, buf, max_bytes, is_newline);
+    return read_until(fd, buf, buf_size, is_newline);
 }
 
 /*

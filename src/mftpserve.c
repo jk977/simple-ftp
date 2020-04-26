@@ -311,7 +311,7 @@ static void handle_connection(int client_sock)
     while (true) {
         char message[CFG_MAXLINE] = {0};
 
-        if (read_line(client_sock, message, sizeof(message) - 1) > 0) {
+        if (read_line(client_sock, message, sizeof message) > 0) {
             process_command(client_sock, &data_sock, message);
         } else {
             log_print("Failed to receive message from client");
