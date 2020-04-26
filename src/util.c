@@ -289,11 +289,11 @@ char const* basename_of(char const* path)
 }
 
 /*
- * is_reg_file: Check if `path` is a regular file. `*error` is set to `true` if
+ * file_is_reg: Check if `path` is a regular file. `*error` is set to `true` if
  *              an error occurs, or `false` otherwise.
  */
 
-static bool is_reg_file(char const* path, bool* error)
+static bool file_is_reg(char const* path, bool* error)
 {
     struct stat buf;
     *error = false;
@@ -321,7 +321,7 @@ static bool is_reg_file(char const* path, bool* error)
 int send_path(int dest_fd, char const* src_path)
 {
     bool error;
-    bool path_is_reg = is_reg_file(src_path, &error);
+    bool path_is_reg = file_is_reg(src_path, &error);
     Q_FAIL_IF(error, EXIT_FAILURE);
 
     if (!path_is_reg) {
@@ -354,15 +354,6 @@ int send_path(int dest_fd, char const* src_path)
 
 int receive_path(char const* dest_path, int src_fd, unsigned int mode)
 {
-    bool error;
-    bool path_is_reg = is_reg_file(dest_path, &error);
-    Q_FAIL_IF(error, EXIT_FAILURE);
-
-    if (!path_is_reg) {
-        errno = ENOTSUP;
-        return EXIT_FAILURE;
-    }
-
     log_print("Sending fd %d contents to %s with mode %o",
               src_fd, dest_path, mode);
 
