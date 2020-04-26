@@ -100,6 +100,19 @@ bool cmd_needs_data(enum cmd_type cmd)
 }
 
 /*
+ * msg_is_cmd: Check if the first word of `msg` is `cmd`.
+ */
+
+static bool msg_is_cmd(char const* msg, char const* cmd)
+{
+    size_t const cmd_len = strlen(cmd);
+    size_t const msg_word_len = word_length(msg);
+
+    return cmd_len == msg_word_len
+        && strncmp(msg, cmd, cmd_len) == 0;
+}
+
+/*
  * cmd_parse: Parse the user-supplied command in `msg`.
  *
  *            Returns a `struct command` containing the command and argument
@@ -117,29 +130,28 @@ struct command cmd_parse(char const* msg)
     };
 
     // get pointer to beginning of command argument
-    size_t const cmd_len = word_length(msg);
-    char const* arg = msg + cmd_len;
+    char const* arg = msg + word_length(msg);
     arg += space_length(arg);
 
     if (arg[0] != '\0') {
         result.arg = arg;
     }
 
-    if (strncmp(msg, "exit", cmd_len) == 0) {
+    if (msg_is_cmd(msg, "exit")) {
         result.type = CMD_EXIT;
-    } else if (strncmp(msg, "cd", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "cd")) {
         result.type = CMD_CD;
-    } else if (strncmp(msg, "rcd", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "rcd")) {
         result.type = CMD_RCD;
-    } else if (strncmp(msg, "ls", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "ls")) {
         result.type = CMD_LS;
-    } else if (strncmp(msg, "rls", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "rls")) {
         result.type = CMD_RLS;
-    } else if (strncmp(msg, "get", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "get")) {
         result.type = CMD_GET;
-    } else if (strncmp(msg, "show", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "show")) {
         result.type = CMD_SHOW;
-    } else if (strncmp(msg, "put", cmd_len) == 0) {
+    } else if (msg_is_cmd(msg, "put")) {
         result.type = CMD_PUT;
     }
 
