@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 /*
@@ -288,16 +289,46 @@ char const* basename_of(char const* path)
 }
 
 /*
+ * is_reg_file: Check if `path` is a regular file. `*error` is set to `true` if
+ *              an error occurs, or `false` otherwise.
+ */
+
+static bool is_reg_file(char const* path, bool* error)
+{
+    struct stat buf;
+    *error = false;
+
+    if (lstat(path, &buf) < 0) {
+        *error = true;
+        return false;
+    }
+
+    return S_ISREG(buf.st_mode);
+}
+
+/*
  * send_path: Put the contents of the file at `src_path` into the file
  *            descriptor `dest_fd`.
  *
  *            Returns `EXIT_FAILURE` if `src_path` can't be opened (or
  *            already exists), or if there was an error while writing the
  *            file. Otherwise, returns `EXIT_SUCCESS`.
+ *
+ *            In the case that `src_path` is not a regular file, in addition
+ *            to returning an error code, `errno` is also set to `ENOTSUP`.
  */
 
 int send_path(int dest_fd, char const* src_path)
 {
+    bool error;
+    bool path_is_reg = is_reg_file(src_path, &error);
+    Q_FAIL_IF(error, EXIT_FAILURE);
+
+    if (!path_is_reg) {
+        errno = ENOTSUP;
+        return EXIT_FAILURE;
+    }
+
     log_print("Sending %s contents to fd %d", src_path, dest_fd);
 
     int const src_fd = open(src_path, O_RDONLY);
@@ -316,10 +347,22 @@ int send_path(int dest_fd, char const* src_path)
  *               Returns `EXIT_FAILURE` if `dest_path` can't be opened (or
  *               already exists), or if there was an error while writing the
  *               file. Otherwise, returns `EXIT_SUCCESS`.
+ *
+ *               In the case that `dest_path` is not a regular file, in addition
+ *               to returning an error code, `errno` is also set to `ENOTSUP`.
  */
 
 int receive_path(char const* dest_path, int src_fd, unsigned int mode)
 {
+    bool error;
+    bool path_is_reg = is_reg_file(dest_path, &error);
+    Q_FAIL_IF(error, EXIT_FAILURE);
+
+    if (!path_is_reg) {
+        errno = ENOTSUP;
+        return EXIT_FAILURE;
+    }
+
     log_print("Sending fd %d contents to %s with mode %o",
               src_fd, dest_path, mode);
 
@@ -408,7 +451,7 @@ struct addrinfo* get_info(char const* host, char const* port)
 
     // get the actual info needed to connect client to the server
     struct addrinfo* info = NULL;
-    GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), "getaddrinfo", NULL);
+    GAI_FAIL_IF(getaddrinfo(host, port, &hints, &info), NULL);
     return info;
 }
 
