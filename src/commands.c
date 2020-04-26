@@ -24,7 +24,7 @@ struct cmd_info const info_table[] = {
     { .has_arg = false, .is_remote = false, .needs_data = false             },
     { .has_arg = false, .is_remote = true,  .needs_data = true,  .ctl = 'L' },
     { .has_arg = true,  .is_remote = true,  .needs_data = true,  .ctl = 'G' },
-    { .has_arg = true,  .is_remote = true,  .needs_data = true,  .ctl = 'S' },
+    { .has_arg = true,  .is_remote = true,  .needs_data = true,  .ctl = 'G' },
     { .has_arg = true,  .is_remote = true,  .needs_data = true,  .ctl = 'P' },
     { .has_arg = false, .is_remote = true,  .needs_data = false, .ctl = 'D' },
 };

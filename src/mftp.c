@@ -281,6 +281,33 @@ static bool validate_data_cmd_arg(struct command cmd)
 }
 
 /*
+ * check_data_response: Get response from server and make sure it's a valid
+ *                      response for a data connection.
+ *
+ *                      Returns `true` if the response was expected, or
+ *                      `false` otherwise. If response was unexpected, an
+ *                      error message is printed.
+ */
+
+static bool check_data_response(int server_sock)
+{
+    char rsp[CFG_MAXLINE] = {0};
+
+    if (get_response(server_sock, rsp, sizeof rsp) < 0) {
+        ERRMSG(strerror(errno));
+        return false;
+    } else if (msg_is_eof(rsp)) {
+        ERRMSG("Unexpected EOF while waiting for server response");
+        return false;
+    } else if (rsp[0] == RSP_ERR) {
+        print_server_error(rsp);
+        return false;
+    }
+
+    return true;
+}
+
+/*
  * handle_data_cmd: Establish a data connection with the server and execute
  *                  `cmd` both locally and remotely, printing an error message
  *                  on failure.
@@ -299,21 +326,14 @@ static int handle_data_cmd(int server_sock, char const* host,
 
     if (send_command(server_sock, cmd) != EXIT_SUCCESS) {
         ERRMSG(strerror(errno));
-        goto fail;
+        close(data_sock);
+        return EXIT_FAILURE;
     }
 
-    char rsp[CFG_MAXLINE] = {0};
-
-    // wait for server success before executing local command
-    if (get_response(server_sock, rsp, sizeof rsp) < 0) {
-        ERRMSG(strerror(errno));
-        goto fail;
-    } else if (msg_is_eof(rsp)) {
-        ERRMSG("Unexpected EOF while waiting for server response");
-        goto fail;
-    } else if (rsp[0] == RSP_ERR) {
-        print_server_error(rsp);
-        goto fail;
+    // ensure server success before executing local command
+    if (!check_data_response(server_sock)) {
+        close(data_sock);
+        return EXIT_FAILURE;
     }
 
     int result;
@@ -340,10 +360,6 @@ static int handle_data_cmd(int server_sock, char const* host,
 
     close(data_sock);
     return result;
-
-fail:
-    close(data_sock);
-    return EXIT_FAILURE;
 }
 
 /*
