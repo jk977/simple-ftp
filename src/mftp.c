@@ -379,6 +379,14 @@ static int run_command(int server_sock, char const* host, char const* msg)
         return EXIT_FAILURE;
     }
 
+    char const* cmd_name = cmd_get_name(cmd.type);
+
+    if (cmd.arg == NULL) {
+        printf("Running \"%s\"\n", cmd_name);
+    } else {
+        printf("Running \"%s\" with argument \"%s\"\n", cmd_name, cmd.arg);
+    }
+
     if (!cmd_is_remote(cmd.type)) {
         return handle_local_cmd(cmd);
     } else if (!cmd_needs_data(cmd.type)) {
