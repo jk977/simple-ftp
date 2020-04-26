@@ -1,5 +1,6 @@
 #include "commands.h"
 #include "config.h"
+#include "io.h"
 #include "logging.h"
 #include "util.h"
 

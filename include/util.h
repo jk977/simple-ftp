@@ -10,8 +10,9 @@
 
 #include <netdb.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
+/*
+ * ERRMSG: Prints a formatted error with content `msg`.
+ */
 
 #define ERRMSG(msg) fprintf(stderr, "Error: %s\n", msg)
 
@@ -59,6 +60,10 @@
 #define STR(val)      #val       /* stringify the value passed */
 #define AS_STR(macro) STR(macro) /* expand + stringify the value/macro passed */
 
+int is_newline(int c);
+int is_not_newline(int c);
+int is_not_space(int c);
+
 size_t word_length(char const* str);
 size_t space_length(char const* str);
 size_t line_length(char const* str);
@@ -66,17 +71,6 @@ size_t line_length(char const* str);
 char const* basename_of(char const* path);
 bool is_readable(char const* path, bool* error);
 bool is_reg(char const* path, bool* error);
-
-ssize_t write_str(int fd, char const* str);
-ssize_t read_line(int fd, char* buf, size_t max_bytes);
-
-int exec_to_fd(int fd, int* status, char* const cmd[]);
-
-int send_file(int dest_fd, int src_fd);
-int page_fd(int fd);
-
-int send_path(int dest_fd, char const* src_path);
-int receive_path(char const* dest_path, int src_fd, unsigned int mode);
 
 int make_socket(struct addrinfo const* info);
 int addr_to_hostname(struct sockaddr const* addr, socklen_t addrlen,

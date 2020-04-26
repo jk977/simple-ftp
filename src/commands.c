@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "io.h"
 #include "logging.h"
 #include "util.h"
 
