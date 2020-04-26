@@ -7,11 +7,8 @@
 #include <stdlib.h>
 
 #include <errno.h>
-#include <fcntl.h>
-#include <ctype.h>
 #include <unistd.h>
 
-#include <sys/stat.h>
 #include <sys/wait.h>
 
 /*
