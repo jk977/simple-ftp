@@ -34,8 +34,6 @@ struct command {
 char const* cmd_get_name(enum cmd_type cmd);
 bool cmd_is_remote(enum cmd_type cmd);
 bool cmd_needs_data(enum cmd_type cmd);
-bool cmd_sends_data(enum cmd_type cmd);
-bool cmd_receives_data(enum cmd_type cmd);
 int cmd_get_ctl(enum cmd_type cmd);
 
 enum cmd_type cmd_get_type(char code);
