@@ -20,13 +20,12 @@
  *
  *            Note that `buf_size` is signed rather than unsigned to ensure the
  *            return value can fit the total size of the buffer. If `buf_size`
- *            is negative, -1 will be returned with `errno` will be set to
- *            `EINVAL`.
+ *            is not positive, -1 will be returned and `errno` set to `EINVAL`.
  */
 
 static ssize_t write_buf(int fd, void const* buf, ssize_t buf_size)
 {
-    if (buf_size < 0) {
+    if (buf_size <= 0) {
         errno = EINVAL;
         return -1;
     }
@@ -50,17 +49,20 @@ static ssize_t write_buf(int fd, void const* buf, ssize_t buf_size)
 /*
  * read_until: Read from `fd` until either an EOF is reached, a byte is read
  *             that returns nonzero from `char_is_end()`, `buf_size - 1` bytes
- *             have been read, or an error occurs. `str` must be at most
- *             `SSIZE_MAX` bytes long, excluding the null-terminating byte.
+ *             have been read, or an error occurs.
  *
  *             Returns the number of bytes read on success, or -1 on failure
  *             with `errno` set.
+ *
+ *             Note that `buf_size` is signed rather than unsigned to ensure the
+ *             return value can fit the total size of the buffer. If `buf_size`
+ *             is not positive, -1 will be returned and `errno` set to `EINVAL`.
  */
 
 static ssize_t read_until(int fd, char* buf, ssize_t buf_size,
         int (*char_is_end)(int))
 {
-    if (buf_size < 0) {
+    if (buf_size <= 0) {
         errno = EINVAL;
         return -1;
     }
@@ -79,10 +81,6 @@ static ssize_t read_until(int fd, char* buf, ssize_t buf_size,
 
         --remaining;
         ++buf;
-    }
-
-    if (prev_bytes != 0) {
-        log_print("Warning: EOF not found while reading from fd %d", fd);
     }
 
     ssize_t const total_bytes = buf_size - remaining - 1;

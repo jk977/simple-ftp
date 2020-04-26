@@ -397,8 +397,8 @@ static int run_command(int server_sock, char const* host, char const* msg)
 /*
  * client_run: Run the client, connecting to the server at `hostname`.
  *
- *             Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
- *             respectively.
+ *             Returns `EXIT_FAILURE` on failure. Otherwise, this function
+ *             does not return.
  */
 
 static int client_run(char const* hostname)
@@ -413,6 +413,11 @@ static int client_run(char const* hostname)
         char buf[CFG_MAXLINE] = {0};
         ssize_t const read_bytes = read_line(STDIN_FILENO, buf, sizeof buf);
         FAIL_IF(read_bytes < 0, EXIT_FAILURE);
+
+        if (buf[0] == '\0') {
+            log_print("Empty user input received; skipping");
+            continue;
+        }
 
         int const status = run_command(server_sock, hostname, buf);
         char const* status_str = (status == EXIT_SUCCESS) ?
