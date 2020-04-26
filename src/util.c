@@ -80,15 +80,6 @@ size_t space_length(char const* str)
 }
 
 /*
- * line_length: Returns the number of characters in the first line of `str`.
- */
-
-size_t line_length(char const* str)
-{
-    return count_chars(str, is_not_newline);
-}
-
-/*
  * is_readable: Returns true if file is readable by the user, otherwise false.
  *              On failure, error and errno are set accordingly.
  *

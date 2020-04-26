@@ -1,3 +1,7 @@
+/*
+ * io.h: I/O-related functions used in the mftp implementation.
+ */
+
 #ifndef IO_H_
 #define IO_H_
 

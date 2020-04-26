@@ -1,3 +1,7 @@
+/*
+ * util.h: Utility functions and macros used throughout the project.
+ */
+
 #ifndef UTIL_H_
 #define UTIL_H_
 
@@ -71,7 +75,6 @@ int is_not_space(int c);
 
 size_t word_length(char const* str);
 size_t space_length(char const* str);
-size_t line_length(char const* str);
 
 char const* basename_of(char const* path);
 bool is_readable(char const* path, bool* error);

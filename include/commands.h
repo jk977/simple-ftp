@@ -1,3 +1,7 @@
+/*
+ * commands.h: Module for server/client command info and utility functions.
+ */
+
 #ifndef COMMANDS_H_
 #define COMMANDS_H_
 

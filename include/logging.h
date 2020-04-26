@@ -1,3 +1,8 @@
+/*
+ * logging.h: Module implementing conditional logging that can be enabled
+ *            and disabled at runtime.
+ */
+
 #ifndef LOGGING_H_
 #define LOGGING_H_
 
