@@ -42,7 +42,6 @@ static ssize_t write_buf(int fd, void const* buf, ssize_t buf_size)
         buf = (char const*) buf + prev_bytes;
     }
 
-    log_print("Wrote %zd bytes to fd %d", total_bytes, fd);
     return total_bytes;
 }
 
@@ -84,7 +83,6 @@ static ssize_t read_until(int fd, char* buf, ssize_t buf_size,
     }
 
     ssize_t const total_bytes = buf_size - remaining - 1;
-    log_print("Read %zd bytes from fd %d", total_bytes, fd);
     return total_bytes;
 }
 
@@ -156,16 +154,18 @@ int send_file(int dest_fd, int src_fd)
     log_print("Sending fd %d contents to fd %d", src_fd, dest_fd);
 
     ssize_t prev_bytes;
-    char buf[BUFSIZ] = {0};
+    char buf[BUFSIZ + 1] = {0};
 
     while ((prev_bytes = read_all(src_fd, buf, sizeof(buf) - 1)) != 0) {
         Q_FAIL_IF(prev_bytes < 0, EXIT_FAILURE);
+        log_print("Read %zd bytes from fd %d", prev_bytes, src_fd);
 
         ssize_t const written_bytes = write_buf(dest_fd, buf, prev_bytes);
         Q_FAIL_IF(written_bytes < 0, EXIT_FAILURE);
+        log_print("Wrote %zd bytes to fd %d", written_bytes, dest_fd);
         Q_FAIL_IF(written_bytes != prev_bytes, EXIT_FAILURE);
 
-        memset(buf, '\0', BUFSIZ);
+        memset(buf, '\0', sizeof buf);
     }
 
     return EXIT_SUCCESS;
@@ -187,11 +187,11 @@ int page_fd(int fd)
     int pipes[2];
     Q_FAIL_IF(pipe(pipes) < 0, EXIT_FAILURE);
 
-    pid_t const child = fork();
-    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+    pid_t const more_child = fork();
+    Q_FAIL_IF(more_child < 0, EXIT_FAILURE);
 
-    if (child == 0) {
-        // child doesn't need write end of pipe
+    if (more_child == 0) {
+        // `more` doesn't need write end of pipe
         close(pipes[1]);
         Q_FAIL_IF(dup2(pipes[0], STDIN_FILENO) < 0, EXIT_FAILURE);
 
@@ -203,12 +203,34 @@ int page_fd(int fd)
     // parent doesn't need read end of pipe
     close(pipes[0]);
 
-    log_print("Sending fd %d to child %u", fd, child);
-    int const status = send_file(pipes[1], fd);
+    // spawn child for `send_file()` call so client doesn't get killed by
+    // SIGPIPE if the pipe closes early
+    pid_t const send_child = fork();
+
+    if (send_child == 0) {
+        // `send_file()` doesn't need read end of pipe
+        close(pipes[0]);
+        log_print("Sending fd %d to child %u from child %u",
+                  fd, more_child, send_child);
+        int const send_result = send_file(pipes[1], fd);
+
+        close(pipes[1]);
+        exit(send_result);
+    }
+
+    // parent no longer needs write end of pipe either
     close(pipes[1]);
 
-    Q_FAIL_IF(wait(NULL) < 0, EXIT_FAILURE);
-    return status;
+    int result;
+    pid_t child = wait(&result);
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+    log_print("Child %u exited with status %d", child, result);
+
+    child = wait(&result);
+    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+    log_print("Child %u exited with status %d", child, result);
+
+    return EXIT_SUCCESS;
 }
 
 /*

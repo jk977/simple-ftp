@@ -216,6 +216,7 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
         err = "Failed to exit process";
         break;
     case CMD_DATA:
+        assert(*data_sock < 0);
         *data_sock = init_data(client_sock);
 
         if (*data_sock >= 0) {
@@ -287,12 +288,18 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         return EXIT_FAILURE;
     }
 
+    int const rsp_status = respond(client_sock, result == EXIT_SUCCESS);
+
+    if (rsp_status != EXIT_SUCCESS) {
+        ERRMSG("%s", strerror(errno));
+        close(*data_sock);
+        return EXIT_FAILURE;
+    }
+
     close(*data_sock);
     log_print("Closed data connection at fd %d", *data_sock);
     *data_sock = -1;
 
-    int const rsp_status = respond(client_sock, result == EXIT_SUCCESS);
-    FAIL_IF(rsp_status != EXIT_SUCCESS, EXIT_FAILURE);
     return result;
 }
 
@@ -335,15 +342,17 @@ static void handle_connection(int client_sock)
     int data_sock = -1;
 
     while (true) {
-        char message[CFG_MAXLINE] = {0};
+        char message[CFG_MAXLINE + 1] = {0};
 
         if (read_line(client_sock, message, sizeof message) > 0) {
             process_command(client_sock, &data_sock, message);
         } else {
-            log_print("Failed to receive message from client");
-            send_err(client_sock, strerror(errno));
+            log_print("Aborting; failed to receive message from client");
+            break;
         }
     }
+
+    close(client_sock);
 }
 
 /*

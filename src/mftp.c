@@ -162,7 +162,7 @@ static int init_data(int server_sock, char const* host)
     struct command const data_cmd = { .type = CMD_DATA, .arg = NULL };
     FAIL_IF(send_command(server_sock, data_cmd) < 0, -1);
 
-    char rsp[CFG_MAXLINE] = {0};
+    char rsp[CFG_MAXLINE + 1] = {0};
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, -1);
 
     if (msg_is_eof(rsp)) {
@@ -252,7 +252,7 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
     assert(server_sock >= 0);
     FAIL_IF(send_command(server_sock, cmd) != EXIT_SUCCESS, EXIT_FAILURE);
 
-    char rsp[CFG_MAXLINE] = {0};
+    char rsp[CFG_MAXLINE + 1] = {0};
     FAIL_IF(get_response(server_sock, rsp, sizeof rsp) < 0, EXIT_FAILURE);
 
     if (msg_is_eof(rsp)) {
@@ -299,7 +299,7 @@ static bool validate_data_cmd(struct command cmd)
 static bool check_data_response(int server_sock)
 {
     assert(server_sock >= 0);
-    char rsp[CFG_MAXLINE] = {0};
+    char rsp[CFG_MAXLINE + 1] = {0};
 
     if (get_response(server_sock, rsp, sizeof rsp) < 0) {
         ERRMSG("%s", strerror(errno));
@@ -429,7 +429,7 @@ static int client_run(char const* host)
         printf(CFG_PROMPT);
         fflush(stdout);
 
-        char buf[CFG_MAXLINE] = {0};
+        char buf[CFG_MAXLINE + 1] = {0};
         ssize_t const read_bytes = read_line(STDIN_FILENO, buf, sizeof buf);
         FAIL_IF(read_bytes < 0, EXIT_FAILURE);
 
