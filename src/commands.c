@@ -106,9 +106,8 @@ bool cmd_needs_data(enum cmd_type cmd)
 static bool msg_is_cmd(char const* msg, char const* cmd)
 {
     size_t const cmd_len = strlen(cmd);
-    size_t const msg_word_len = word_length(msg);
 
-    return cmd_len == msg_word_len
+    return cmd_len == word_length(msg)
         && strncmp(msg, cmd, cmd_len) == 0;
 }
 
