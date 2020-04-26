@@ -79,7 +79,7 @@ size_t space_length(char const* str)
 }
 
 /*
- * space_length: Returns the number of characters in the first line of `str`.
+ * line_length: Returns the number of characters in the first line of `str`.
  */
 
 size_t line_length(char const* str)
