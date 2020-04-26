@@ -8,51 +8,61 @@
 
 #include <sys/stat.h>
 
+// direction of data relative to the client process
+enum data_direction { DATA_SEND, DATA_RECV, DATA_NONE };
+
 struct cmd_info {
-    char const* name;   // human-readable command name
-    bool has_arg;       // flag for required command argument
-    bool is_remote;     // flag for command that communicates with server
-    bool needs_data;    // flag for command that receives data from server
-    char ctl;           // character used for command in control message
+    char const* name;           // human-readable command name
+    bool has_arg;               // flag for required command argument
+    bool is_remote;             // flag for command that communicates with server
+    enum data_direction dir;    // whether command sends/receives data
+    char ctl;                   // character used for command in control message
 };
 
 // table associating index (as an `enum cmd_type`) with command info
 struct cmd_info const info_table[] = {
     {
         .name = "exit", .has_arg = false,
-        .is_remote = true, .needs_data = false, .ctl = 'Q'
+        .is_remote = true, .dir = DATA_NONE,
+        .ctl = 'Q',
     },
     {
         .name = "cd", .has_arg = true,
-        .is_remote = false, .needs_data = false
+        .is_remote = false, .dir = DATA_NONE,
     },
     {
         .name = "rcd", .has_arg = true,
-        .is_remote = true, .needs_data = false, .ctl = 'C'
+        .is_remote = true, .dir = DATA_NONE,
+        .ctl = 'C',
     },
     {
         .name = "ls", .has_arg = false,
-        .is_remote = false, .needs_data = false
+        .is_remote = false, .dir = DATA_NONE,
     },
     {
         .name = "rls", .has_arg = false,
-        .is_remote = true, .needs_data = true, .ctl = 'L'
+        .is_remote = true, .dir = DATA_RECV,
+        .ctl = 'L'
     },
     {
         .name = "get", .has_arg = true,
-        .is_remote = true, .needs_data = true, .ctl = 'G'
+        .is_remote = true, .dir = DATA_RECV,
+        .ctl = 'G'
     },
     {
         .name = "show", .has_arg = true,
-        .is_remote = true, .needs_data = true, .ctl = 'G'
+        .is_remote = true, .dir = DATA_RECV,
+        .ctl = 'G'
     },
     {
         .name = "put", .has_arg = true,
-        .is_remote = true, .needs_data = true, .ctl = 'P'
+        .is_remote = true, .dir = DATA_SEND,
+        .ctl = 'P'
     },
     {
         .name = NULL, .has_arg = false,
-        .is_remote = true, .needs_data = false, .ctl = 'D'
+        .is_remote = true, .dir = DATA_NONE,
+        .ctl = 'D'
     },
 };
 
@@ -92,7 +102,35 @@ bool cmd_needs_data(enum cmd_type cmd)
     if (!cmd_is_remote(cmd)) {
         return false;
     } else {
-        return info_table[cmd].needs_data;
+        return info_table[cmd].dir != DATA_NONE;
+    }
+}
+
+/*
+ * cmd_sends_data: Return whether or not the command sends data over data
+ *                 connection.
+ */
+
+bool cmd_sends_data(enum cmd_type cmd)
+{
+    if (!cmd_needs_data(cmd)) {
+        return false;
+    } else {
+        return info_table[cmd].dir == DATA_SEND;
+    }
+}
+
+/*
+ * cmd_receives_data: Return whether or not the command requires a data
+ *                    connection.
+ */
+
+bool cmd_receives_data(enum cmd_type cmd)
+{
+    if (!cmd_needs_data(cmd)) {
+        return false;
+    } else {
+        return info_table[cmd].dir == DATA_RECV;
     }
 }
 
