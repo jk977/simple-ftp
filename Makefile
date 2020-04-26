@@ -16,7 +16,7 @@ endif
 OBJECTS := logging.o util.o commands.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
-.PHONY: all paths clean
+.PHONY: all paths clean tags
 
 all: $(BUILD)/mftp $(BUILD)/mftpserve
 
@@ -34,3 +34,6 @@ paths:
 
 clean:
 	rm -f build/*
+
+tags:
+	ctags -R
