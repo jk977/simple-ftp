@@ -22,7 +22,7 @@ void log_print(char const* fmt, ...)
     // timestamp the output in nanoseconds for debugging purposes
     struct timespec tp;
     clock_gettime(CLOCK_REALTIME, &tp);
-    printf(PRIdMAX".%09l - ", (intmax_t) tp.tv_sec, tp.tv_nsec);
+    printf(PRIdMAX ".%09l - ", (intmax_t) tp.tv_sec, tp.tv_nsec);
 
     va_list ap;
 
