@@ -263,7 +263,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
         result = receive_path(basename_of(cmd.arg), *data_sock, 0666);
         break;
     default:
-        log_print("Unexpected command %d; check info table for accuracy", cmd);
+        fprintf(stderr, "Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
 

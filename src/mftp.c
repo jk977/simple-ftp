@@ -71,7 +71,7 @@ static int send_command(int sock, struct command cmd)
         log_print("Sent command to fd %d: %c%s", sock, code, cmd.arg);
     } else {
         Q_FAIL_IF(dprintf(sock, "%c\n", code) < 0, EXIT_FAILURE);
-        log_print("Sent command: %c", code);
+        log_print("Sent command to fd %d: %c", sock, code);
     }
 
     return EXIT_SUCCESS;
@@ -325,7 +325,7 @@ static int handle_data_cmd(int server_sock, char const* host,
         result = send_path(data_sock, cmd.arg);
         break;
     default:
-        log_print("Unexpected command %d; check info table for accuracy", cmd);
+        fprintf(stderr, "Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
 
