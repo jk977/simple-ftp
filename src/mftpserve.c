@@ -47,7 +47,6 @@ static void usage(FILE* stream)
 static int send_ack(int sock, in_port_t const* port)
 {
     assert(sock >= 0);
-    assert(port != NULL);
 
     if (port != NULL) {
         log_print("Sending ack to %d with port %u", sock, *port);
