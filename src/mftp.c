@@ -192,23 +192,44 @@ static int init_data(int server_sock, char const* host)
 static int local_ls(void)
 {
     int pipes[2];
-    Q_FAIL_IF(pipe(pipes) < 0, EXIT_FAILURE);
+    FAIL_IF(pipe(pipes) < 0, EXIT_FAILURE);
 
+    // spawn child process to page output
     pid_t const child = fork();
-    Q_FAIL_IF(child < 0, EXIT_FAILURE);
+    FAIL_IF(child < 0, EXIT_FAILURE);
 
     if (child == 0) {
         close(pipes[1]);
         exit(page_fd(pipes[0]));
     }
 
+    // pipe the `ls` command into child process
     close(pipes[0]);
-    Q_FAIL_IF(cmd_ls(pipes[1]) != EXIT_SUCCESS, EXIT_FAILURE);
+    int const ls_result = cmd_ls(pipes[1]);
     close(pipes[1]);
 
-    int status;
-    Q_FAIL_IF(wait(&status) < 0, EXIT_FAILURE);
-    return status;
+    // don't care about the exit status of the paging process
+    FAIL_IF(wait(NULL) < 0, EXIT_FAILURE);
+
+    if (ls_result != EXIT_SUCCESS) {
+        ERRMSG("%s", "Command `ls` failed");
+    }
+
+    return ls_result;
+}
+
+/*
+ * local_chdir: Execute `cmd_chdir(path)` locally, printing error messages if
+ *              relevant.
+ *
+ *              Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
+ *              respectively.
+ */
+
+static int local_chdir(char const* path)
+{
+    FAIL_IF(cmd_chdir(path) != EXIT_SUCCESS, EXIT_FAILURE);
+    return EXIT_SUCCESS;
 }
 
 /*
@@ -221,22 +242,15 @@ static int local_ls(void)
 
 static int handle_local_cmd(struct command cmd)
 {
-    int result;
-
     switch (cmd.type) {
     case CMD_LS:
-        result = local_ls();
-        break;
+        return local_ls();
     case CMD_CD:
-        result = cmd_chdir(cmd.arg);
-        break;
+        return local_chdir(cmd.arg);
     default:
         fprintf(stderr, "Unexpected command %d; info table error?", cmd.type);
         return EXIT_FAILURE;
     }
-
-    FAIL_IF(result != EXIT_SUCCESS, EXIT_FAILURE);
-    return EXIT_SUCCESS;
 }
 
 /*

@@ -208,13 +208,12 @@ int page_fd(int fd)
     pid_t const send_child = fork();
 
     if (send_child == 0) {
-        // `send_file()` doesn't need read end of pipe
-        close(pipes[0]);
         log_print("Sending fd %d to child %u from child %u",
-                  fd, more_child, send_child);
+                  fd, more_child, getpid());
         int const send_result = send_file(pipes[1], fd);
 
         close(pipes[1]);
+        log_print("send exited with status %d", send_result);
         exit(send_result);
     }
 
