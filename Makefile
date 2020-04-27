@@ -1,10 +1,12 @@
+PORT ?= 49999
+
 SRC ?= ./src
 INCLUDE ?= ./include
 BUILD ?= ./build
 
 C = $(CC) $(CFLAGS)
 CC := gcc
-CFLAGS := -I$(INCLUDE) -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror
+CFLAGS := -I$(INCLUDE) -std=c99 -DCFG_PORT=$(PORT) -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror
 
 ifdef DEBUG
 	CFLAGS += -g3 -fsanitize=address,leak,undefined
