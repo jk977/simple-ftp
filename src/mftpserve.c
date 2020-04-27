@@ -266,7 +266,10 @@ static int handle_put_cmd(int client_sock, int* data_sock, char const* path)
     char const* dest = basename_of(path);
     int const dest_fd = open(dest, O_WRONLY | O_CREAT | O_EXCL, 0666);
     FAIL_IF(respond(client_sock, dest_fd >= 0) != EXIT_SUCCESS, EXIT_FAILURE);
-    FAIL_IF(send_file(dest_fd, *data_sock) != EXIT_SUCCESS, EXIT_FAILURE);
+
+    if (dest_fd >= 0) {
+        FAIL_IF(send_file(dest_fd, *data_sock) != EXIT_SUCCESS, EXIT_FAILURE);
+    }
 
     return EXIT_SUCCESS;
 }
