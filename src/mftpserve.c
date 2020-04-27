@@ -212,11 +212,7 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
     switch (cmd.type) {
     case CMD_EXIT:
         server_exit(client_sock);
-
-        // this line should never be reached
-        result = EXIT_FAILURE;
-        err = "Failed to exit process";
-        break;
+        return EXIT_FAILURE; // unreachable
     case CMD_DATA:
         assert(*data_sock < 0);
         *data_sock = init_data(client_sock);
@@ -250,15 +246,25 @@ static int handle_local_cmd(int client_sock, int* data_sock, struct command cmd)
     return result;
 }
 
-static int handle_receive(int client_sock, int* data_sock, struct command cmd)
+/*
+ * handle_put_cmd: Receive the file from the data connection and put it in the
+ *                 working directory. Handled separately from the other data
+ *                 commands due to acknowledge having a different timing than
+ *                 the rest.
+ *
+ *                 Returns `EXIT_SUCCESS` or `EXIT_FAILURE` on success or
+ *                 failure, respectively. On failure, a relevant error message
+ *                 is printed.
+ */
+
+static int handle_put_cmd(int client_sock, int* data_sock, char const* path)
 {
     assert(client_sock >= 0);
     assert(data_sock != NULL);
     assert(*data_sock >= 0);
-    assert(cmd.type != CMD_INVALID);
-    assert(cmd.arg != NULL);
+    assert(path != NULL);
 
-    char const* dest = basename_of(cmd.arg);
+    char const* dest = basename_of(path);
     int const dest_fd = open(dest, O_WRONLY | O_CREAT | O_EXCL, 0666);
     FAIL_IF(respond(client_sock, dest_fd >= 0) != EXIT_SUCCESS, EXIT_FAILURE);
     FAIL_IF(send_file(dest_fd, *data_sock) != EXIT_SUCCESS, EXIT_FAILURE);
@@ -291,7 +297,7 @@ static int handle_data_cmd(int client_sock, int* data_sock, struct command cmd)
     if (cmd.type == CMD_PUT) {
         // handle put separately since the ack timing is different from
         // the other commands
-        return handle_receive(client_sock, data_sock, cmd);
+        return handle_put_cmd(client_sock, data_sock, cmd.arg);
     }
 
     int result;
@@ -326,6 +332,8 @@ static int process_command(int client_sock, int* data_sock, char const* msg)
 
     log_print("Received command from client: %s", msg);
 
+    // recreate command from message -- first char is command code and
+    // remainder is the argument
     struct command cmd = {
         .type = cmd_get_type(msg[0]),
         .arg = &msg[1],
@@ -333,14 +341,11 @@ static int process_command(int client_sock, int* data_sock, char const* msg)
 
     if (cmd.type == CMD_INVALID) {
         return send_err(client_sock, "Unrecognized command");
-    }
-
-    if (!cmd_needs_data(cmd.type)) {
+    } else if (!cmd_needs_data(cmd.type)) {
         return handle_local_cmd(client_sock, data_sock, cmd);
     } else {
         int const status = handle_data_cmd(client_sock, data_sock, cmd);
         close(*data_sock);
-        log_print("Closed data connection at fd %d", *data_sock);
         *data_sock = -1;
 
         return status;
@@ -349,6 +354,8 @@ static int process_command(int client_sock, int* data_sock, char const* msg)
 
 /*
  * handle_connection: Handle the connection given by the given file descriptor.
+ *
+ *                    This function does not return.
  */
 
 static void handle_connection(int client_sock)
@@ -364,11 +371,10 @@ static void handle_connection(int client_sock)
             process_command(client_sock, &data_sock, message);
         } else {
             log_print("Aborting; failed to receive message from client");
-            break;
+            close(client_sock);
+            exit(EXIT_FAILURE);
         }
     }
-
-    close(client_sock);
 }
 
 /*
@@ -427,9 +433,10 @@ static int run_server(void)
 
         if (child == 0) {
             handle_connection(client_sock);
+            // unreachable
         }
 
-        // parent doesn't need client
+        // parent doesn't need client connection
         close(client_sock);
     }
 }

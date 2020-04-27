@@ -335,11 +335,12 @@ static bool check_data_response(int server_sock)
 
 /*
  * setup_data_conn: Prepare the data connection to execute the local part of the
- *                  given command, consisting of 3 parts:
+ *                  given command, consisting of 4 parts:
  *
- *                      1. Initialize data socket
- *                      2. Send the command to the server
- *                      3. Check for server acknowledgement
+ *                      1. Check if command arg is valid, if it's a file to send
+ *                      2. Initialize data socket
+ *                      3. Send the command to the server
+ *                      4. Check for server acknowledgement
  *
  *                 Returns the data socket to use for the command on success,
  *                 or -1 on error. If an error occurs, a relevant error message
@@ -348,6 +349,9 @@ static bool check_data_response(int server_sock)
 
 static int setup_data_conn(int server_sock, char const* host, struct command cmd)
 {
+    assert(server_sock >= 0);
+    assert(host != NULL);
+
     if (cmd.type == CMD_PUT) {
         Q_FAIL_IF(!test_put_path(cmd.arg), -1);
     }
@@ -355,7 +359,7 @@ static int setup_data_conn(int server_sock, char const* host, struct command cmd
     int const data_sock = init_data_sock(server_sock, host);
     Q_FAIL_IF(data_sock < 0, -1);
 
-    if (send_command(server_sock, cmd) != -1) {
+    if (send_command(server_sock, cmd) != EXIT_SUCCESS) {
         ERRMSG("%s", strerror(errno));
         close(data_sock);
         return -1;
@@ -470,8 +474,7 @@ static int client_run(char const* host)
         fflush(stdout);
 
         char buf[CFG_MAXLINE + 1] = {0};
-        ssize_t const read_bytes = read_line(STDIN_FILENO, buf, sizeof buf);
-        FAIL_IF(read_bytes < 0, EXIT_FAILURE);
+        FAIL_IF(read_line(STDIN_FILENO, buf, sizeof buf) < 0, EXIT_FAILURE);
 
         if (buf[0] == '\0') {
             log_print("Empty user input received; skipping");
