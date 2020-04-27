@@ -1,22 +1,21 @@
 SRC ?= ./src
 INCLUDE ?= ./include
 BUILD ?= ./build
-TESTS ?= ./tests
 
 C = $(CC) $(CFLAGS)
 CC := gcc
 CFLAGS := -I$(INCLUDE) -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror
 
 ifdef DEBUG
-	CFLAGS += -O0 -g3 -fsanitize=address,leak,undefined
+	CFLAGS += -g3 -fsanitize=address,leak,undefined
 else
-	CFLAGS += -O2 -DNDEBUG
+	CFLAGS += -DNDEBUG
 endif
 
 OBJECTS := logging.o io.o util.o commands.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
-.PHONY: all tests paths clean tags
+.PHONY: all paths clean tags
 
 all: $(BUILD)/mftp $(BUILD)/mftpserve
 
@@ -29,14 +28,11 @@ $(BUILD)/mftpserve: paths $(SRC)/mftpserve.c $(OBJECT_FILES)
 $(BUILD)/%.o: $(SRC)/%.c
 	$(C) $^ -c -o $@
 
-tests: all
-	$(C) $(OBJECT_FILES) $(TESTS)/send.c -o $(BUILD)/send
-
 paths:
 	mkdir -p build
 
 clean:
-	rm -f build/*
+	rm -f build/* tags
 
 tags:
 	ctags -R
