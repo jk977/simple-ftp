@@ -26,19 +26,20 @@
     } while (0)
 
 /*
- * FAIL_IF: Logs error message associated with `errno` and returns `ret` if
- *          `cond` is truthy.
+ * FAIL_IF: Logs error message associated with `errno` (if nonzero) and returns
+ *          `ret` if `cond` is truthy.
  *
  *          This greatly reduces boilerplate code without sacrificing the safety
  *          provided by checking for errors.
  */
 
-#define FAIL_IF(cond, ret)                  \
-    do {                                    \
-        if (cond) {                         \
-            ERRMSG("%s", strerror(errno));  \
-            return ret;                     \
-        }                                   \
+#define FAIL_IF(cond, ret)                      \
+    do {                                        \
+        if (cond) {                             \
+            if (errno != 0)                     \
+                ERRMSG("%s", strerror(errno));  \
+            return ret;                         \
+        }                                       \
     } while (0)
 
 /*

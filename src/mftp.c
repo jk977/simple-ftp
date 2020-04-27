@@ -120,8 +120,7 @@ static ssize_t get_response(int sock, char* rsp, ssize_t rsp_len)
 /*
  * connect_to: Connect to the given host and port.
  *
- *             Returns `EXIT_FAILURE` or `EXIT_SUCCESS` on success or failure,
- *             respectively.
+ *             Returns the resulting socket on success, or -1 otherwise.
  */
 
 static int connect_to(char const* host, char const* port)
@@ -130,9 +129,10 @@ static int connect_to(char const* host, char const* port)
     assert(port != NULL);
 
     struct addrinfo* info = get_info(host, port);
+    Q_FAIL_IF(info == NULL, -1);
 
     int const sock = make_socket(info);
-    Q_FAIL_IF(sock < 0, EXIT_FAILURE);
+    Q_FAIL_IF(sock < 0, -1);
 
     // copy the required data from the info struct and free it
     struct sockaddr const dest_addr = *info->ai_addr;
@@ -140,7 +140,7 @@ static int connect_to(char const* host, char const* port)
     freeaddrinfo(info);
 
     // use the provided info to connect to the given destination
-    Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, EXIT_FAILURE);
+    Q_FAIL_IF(connect(sock, &dest_addr, dest_addrlen) < 0, -1);
     log_print("Successfully connected to %s:%s (fd %d)", host, port, sock);
 
     return sock;
