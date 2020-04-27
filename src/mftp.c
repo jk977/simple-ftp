@@ -147,14 +147,14 @@ static int connect_to(char const* host, char const* port)
 }
 
 /*
- * init_data: Initialize a data connection with the server at `host`,
- *            communicating through `server_sock`.
+ * init_data_sock: Initialize a data socket with the server at `host`,
+ *                 communicating through `server_sock`.
  *
- *            Returns the socket to send and receive data through on success,
- *            or -1 on failure.
+ *                 Returns the socket to send and receive data through on
+ *                 success, or -1 on failure.
  */
 
-static int init_data(int server_sock, char const* host)
+static int init_data_sock(int server_sock, char const* host)
 {
     assert(server_sock >= 0);
     assert(host != NULL);
@@ -283,22 +283,25 @@ static int handle_remote_cmd(int server_sock, struct command cmd)
 }
 
 /*
- * validate_data_cmd: Make sure the argument in the given command is acceptable.
+ * test_put_path: Test if `path` can be used in the put command.
  *
- *                    Returns `true` if argument is valid, or `false` otherwise.
- *                    If not valid, prints an error message.
+ *                Returns `true` if `path` is a readable regular file, or
+ *                `false` otherwise. If not valid, prints an error message.
  */
 
-static bool validate_data_cmd(struct command cmd)
+static bool test_put_path(char const* path)
 {
-    if (cmd.type == CMD_PUT) {
-        bool error;
-        bool const arg_is_valid = is_readable_reg(cmd.arg, &error);
-        FAIL_IF(error, false);
-        return arg_is_valid;
-    } else {
-        return true;
+    assert(path != NULL);
+
+    bool error;
+    bool const arg_is_valid = is_readable_reg(path, &error);
+    FAIL_IF(error, false);
+
+    if (!arg_is_valid) {
+        ERRMSG("Path \"%s\" is not a readable regular file", path);
     }
+
+    return arg_is_valid;
 }
 
 /*
@@ -313,6 +316,7 @@ static bool validate_data_cmd(struct command cmd)
 static bool check_data_response(int server_sock)
 {
     assert(server_sock >= 0);
+
     char rsp[CFG_MAXLINE + 1] = {0};
 
     if (get_response(server_sock, rsp, sizeof rsp) < 0) {
@@ -330,6 +334,42 @@ static bool check_data_response(int server_sock)
 }
 
 /*
+ * setup_data_conn: Prepare the data connection to execute the local part of the
+ *                  given command, consisting of 3 parts:
+ *
+ *                      1. Initialize data socket
+ *                      2. Send the command to the server
+ *                      3. Check for server acknowledgement
+ *
+ *                 Returns the data socket to use for the command on success,
+ *                 or -1 on error. If an error occurs, a relevant error message
+ *                 is printed.
+ */
+
+static int setup_data_conn(int server_sock, char const* host, struct command cmd)
+{
+    if (cmd.type == CMD_PUT) {
+        Q_FAIL_IF(!test_put_path(cmd.arg), -1);
+    }
+
+    int const data_sock = init_data_sock(server_sock, host);
+    Q_FAIL_IF(data_sock < 0, -1);
+
+    if (send_command(server_sock, cmd) != -1) {
+        ERRMSG("%s", strerror(errno));
+        close(data_sock);
+        return -1;
+    }
+
+    if (!check_data_response(server_sock)) {
+        close(data_sock);
+        return -1;
+    }
+
+    return data_sock;
+}
+
+/*
  * handle_data_cmd: Establish a data connection with the server and execute
  *                  `cmd` both locally and remotely, printing an error message
  *                  on failure.
@@ -344,22 +384,8 @@ static int handle_data_cmd(int server_sock, char const* host,
     assert(server_sock >= 0);
     assert(host != NULL);
 
-    Q_FAIL_IF(!validate_data_cmd(cmd), EXIT_FAILURE);
-
-    int const data_sock = init_data(server_sock, host);
+    int const data_sock = setup_data_conn(server_sock, host, cmd);
     Q_FAIL_IF(data_sock < 0, EXIT_FAILURE);
-
-    if (send_command(server_sock, cmd) != EXIT_SUCCESS) {
-        ERRMSG("%s", strerror(errno));
-        close(data_sock);
-        return EXIT_FAILURE;
-    }
-
-    // ensure server success before executing local command
-    if (!check_data_response(server_sock)) {
-        close(data_sock);
-        return EXIT_FAILURE;
-    }
 
     int result;
 
