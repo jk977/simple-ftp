@@ -20,14 +20,16 @@ To compile the executables, run `make` in the project root. The executables are 
 
 After compiling, run `mftpserve` to start the server. To connect to the server, run `mktp SERVER`, where `SERVER` is the address of the server, either in dotted-decimal form or as a conventional host address. The following commands are available to the client:
 
-* `cd PATH`: Change the client's working directory to `PATH`.
-* `rcd PATH`: Change the server's working directory to `PATH`.
-* `ls`: List the files in the client's working directory.
-* `rls`: List the files in the server's working directory.
-* `get PATH`: Store the server file at `PATH` in the client's working directory.
-* `show PATH`: Display the contents of the server file at `PATH` to the client's stdout.
-* `put PATH`: Store the client file at `PATH` in the server's working directory.
-* `exit`: Exit the client.
+| Command   | Argument  | Description                                          |
+|:---------:|:---------:|:----------------------------------------------------:|
+| cd        | PATH      | Change the client's working directory to `PATH`      |
+| rcd       | PATH      | Change the server's working directory to `PATH`      |
+| ls        | (None)    | List the files in the client's working directory     |
+| rls       | (None)    | List the files in the server's working directory     |
+| get       | PATH      | Store the server file at `PATH` in the client's working directory |
+| show      | PATH      | Display the contents of the server file at `PATH` to the client's stdout |
+| put       | PATH      | Store the client file at `PATH` in the server's working directory |
+| exit      | (None)    | Exit the client                                      |
 
 ## Server/Client Protocol
 
