@@ -1,4 +1,4 @@
-# MFTP
+# Simple FTP
 
 ## About
 
@@ -28,3 +28,22 @@ After compiling, run `mftpserve` to start the server. To connect to the server, 
 * `show PATH`: Display the contents of the server file at `PATH` to the client's stdout.
 * `put PATH`: Store the client file at `PATH` in the server's working directory.
 * `exit`: Exit the client.
+
+## Server/Client Protocol
+
+The messages sent from the client to the server are in the following format:
+
+```
+<CMD><ARG>\n
+```
+
+`<CMD>` is a single character that indicates which command to execute. `<ARG>` is the argument to the given command, and may be omitted in certain commands. The list of available commands is as follows:
+
+| Command   | Argument  | Requires Data Connection | Description               |
+|:---------:|:---------:|:------------------------:|:-------------------------:|
+| D         | (None)    | False                    | Establish a data connection with the server     |
+| C         | PATH      | False                    | Change the server's working directory to PATH |
+| L         | (None)    | True                     | Send a list of files in the server's working directory to the client over the data connection |
+| G         | PATH      | True                     | Send the server file at PATH to the client over the data connection |
+| P         | PATH      | True                     | Send the client file at PATH to the server over the data connection |
+| Q         | (None)    | False                    | Close the connection with the client |
