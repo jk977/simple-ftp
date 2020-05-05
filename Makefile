@@ -4,9 +4,10 @@ SRC ?= ./src
 INCLUDE ?= ./include
 BUILD ?= ./build
 
-C = $(CC) $(CFLAGS)
 CC := gcc
 CFLAGS := -I$(INCLUDE) -std=c99 -DCFG_PORT=$(PORT) -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror
+
+C = $(CC) $(CFLAGS)
 
 ifdef DEBUG
 	CFLAGS += -g3 -fsanitize=address,leak,undefined
@@ -17,15 +18,15 @@ endif
 OBJECTS := logging.o io.o util.o commands.o
 OBJECT_FILES := $(foreach obj, $(OBJECTS), $(BUILD)/$(obj))
 
-.PHONY: all paths clean tags
+.PHONY: all paths clean
 
-all: $(BUILD)/mftp $(BUILD)/mftpserve
+all: mftp mftpserve
 
-$(BUILD)/mftp: paths $(SRC)/mftp.c $(OBJECT_FILES)
-	$(C) $(OBJECT_FILES) $(SRC)/mftp.c -o $@
+mftp: paths $(SRC)/mftp.c $(OBJECT_FILES)
+	$(C) $(OBJECT_FILES) $(SRC)/mftp.c -o $(BUILD)/$@
 
-$(BUILD)/mftpserve: paths $(SRC)/mftpserve.c $(OBJECT_FILES)
-	$(C) $(OBJECT_FILES) $(SRC)/mftpserve.c -o $@
+mftpserve: paths $(SRC)/mftpserve.c $(OBJECT_FILES)
+	$(C) $(OBJECT_FILES) $(SRC)/mftpserve.c -o $(BUILD)/$@
 
 $(BUILD)/%.o: $(SRC)/%.c
 	$(C) $^ -c -o $@
@@ -35,6 +36,3 @@ paths:
 
 clean:
 	rm -f build/* tags
-
-tags:
-	ctags -R
