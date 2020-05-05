@@ -2,7 +2,7 @@
 
 ## About
 
-A simple server/client program for transferring raw data files over TCP, with some extensions.
+A simple server/client program for transferring raw data files over TCP, with some extensions. This does not follow the FTP protocols, but rather implements a simplified version of FTP.
 
 ## Dependencies
 
