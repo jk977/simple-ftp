@@ -22,13 +22,13 @@ After compiling, run `mftpserve` to start the server. To connect to the server, 
 
 | Command   | Argument  | Description                                          |
 |:---------:|:---------:|:----------------------------------------------------:|
-| cd        | PATH      | Change the client's working directory to `PATH`      |
-| rcd       | PATH      | Change the server's working directory to `PATH`      |
+| cd        | `PATH`    | Change the client's working directory to `PATH`      |
+| rcd       | `PATH`    | Change the server's working directory to `PATH`      |
 | ls        | (None)    | List the files in the client's working directory     |
 | rls       | (None)    | List the files in the server's working directory     |
-| get       | PATH      | Store the server file at `PATH` in the client's working directory |
-| show      | PATH      | Display the contents of the server file at `PATH` to the client's stdout |
-| put       | PATH      | Store the client file at `PATH` in the server's working directory |
+| get       | `PATH`    | Store the server file at `PATH` in the client's working directory |
+| show      | `PATH`    | Display the contents of the server file at `PATH` to the client's stdout |
+| put       | `PATH`    | Store the client file at `PATH` in the server's working directory |
 | exit      | (None)    | Exit the client                                      |
 
 ## Server/Client Protocol
@@ -43,9 +43,9 @@ The messages sent from the client to the server are in the following format:
 
 | Command   | Argument  | Requires Data Connection | Description               |
 |:---------:|:---------:|:------------------------:|:-------------------------:|
-| D         | (None)    | False                    | Establish a data connection with the server     |
-| C         | PATH      | False                    | Change the server's working directory to PATH |
-| L         | (None)    | True                     | Send a list of files in the server's working directory to the client over the data connection |
-| G         | PATH      | True                     | Send the server file at PATH to the client over the data connection |
-| P         | PATH      | True                     | Send the client file at PATH to the server over the data connection |
-| Q         | (None)    | False                    | Close the connection with the client |
+| D         | (None)    | No                       | Establish a data connection with the server     |
+| C         | `PATH`    | No                       | Change the server's working directory to `PATH` |
+| L         | (None)    | Yes                      | Send a list of files in the server's working directory to the client over the data connection |
+| G         | `PATH`    | Yes                      | Send the server file at `PATH` to the client over the data connection |
+| P         | `PATH`    | Yes                      | Send the client file at `PATH` to the server over the data connection |
+| Q         | (None)    | No                       | Close the connection with the client |
